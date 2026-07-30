@@ -509,21 +509,21 @@
       "dispatchStop": "Stopping agent…",
       "dispatchFailed": "Dispatch failed",
       "executionMode": {
-        "title": "Mode",
+        "title": "Permission",
         "plan": {
-          "label": "Plan",
-          "desc": "Read-only — analyze and plan, no edits",
-          "permission": "Read-only"
+          "label": "Ask for approval",
+          "desc": "Ask before editing files, running commands, or using the internet",
+          "permission": "Approval required"
         },
         "build": {
-          "label": "Build",
-          "desc": "Edit the workspace — asks for approval before commands and mutating tools",
-          "permission": "Edits + approvals"
+          "label": "Approve for me",
+          "desc": "Ask only for actions detected as potentially unsafe",
+          "permission": "Unsafe actions only"
         },
         "yolo": {
-          "label": "Yolo",
-          "desc": "Full access, approvals bypassed",
-          "permission": "Full access"
+          "label": "Full access",
+          "desc": "Unrestricted access to the internet and files on this computer",
+          "permission": "No approvals"
         }
       },
       "mentions": {
@@ -769,6 +769,8 @@
         "read": "Read",
         "edited": "Edited",
         "command": "Ran",
+        "commandRunning": "Running",
+        "commandComplete": "Ran",
         "files_one": "{{count}} file",
         "files_other": "{{count}} files",
         "running": "Working…",
@@ -2492,7 +2494,30 @@
       "moreTools": "More",
       "moreToolsAria": "More composer tools",
       "modelChipAria": "Agent, model, and reasoning",
-      "compactModelMenu": "Model settings"
+      "compactModelMenu": "Model settings",
+      "add": "Add",
+      "stopExecution": "Stop execution",
+      "permissionTitle": "How should actions be approved?",
+      "permissionSaveFailed": "Failed to save the conversation permission.",
+      "actions": {
+        "files": "Files and folders",
+        "context": "Context",
+        "diff": "Diff",
+        "kb": "Knowledge Base",
+        "magic": "Magic",
+        "goal": "Goal",
+        "commands": "Commands and skills"
+      },
+      "queue": {
+        "steerNow": "Steer now",
+        "sendAgain": "Send again",
+        "remove": "Remove queued guidance",
+        "more": "More options for queued guidance",
+        "edit": "Edit message",
+        "sideChat": "Open in side chat",
+        "disable": "Turn off queueing",
+        "enable": "Turn on queueing"
+      }
     },
     "goalDock": {
       "ariaLabel": "Goal",
@@ -2598,6 +2623,7 @@
       "stop": "Stop",
       "kill": "Kill",
       "staleHint": "No updates — Stop or Kill?",
+      "staleHintPassive": "No updates",
       "killFailed": "Could not kill that command. Stop the turn instead?",
       "verbs": {
         "pondering": "Pondering",

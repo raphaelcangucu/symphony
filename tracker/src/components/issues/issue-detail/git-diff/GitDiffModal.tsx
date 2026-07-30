@@ -1,5 +1,5 @@
 import { Columns2, GitBranch, GitCommitHorizontal, Loader2, MessageSquareText, RefreshCw, Rows3, Search, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -140,13 +140,27 @@ export default function GitDiffModal({
     setDebouncedQuery(filter);
   }, [activeTab, focusAttempt, pendingFocusPath]);
 
+  const refreshPushAvailability = useCallback(async () => {
+    if (!projectSlug || !identifier) {
+      setCanPush(false);
+      return;
+    }
+
+    try {
+      const result = await getGitDiffSummaries(projectSlug, identifier);
+      setCanPush(result.summaries.some((summary) => summary.aheadCount > 0));
+    } catch {
+      setCanPush(false);
+    }
+  }, [identifier, projectSlug]);
+
   useEffect(() => {
     if (!commitDialogOpen) {
       setCommitDialogError(null);
       return;
     }
     void refreshPushAvailability();
-  }, [commitDialogOpen, identifier, projectSlug]);
+  }, [commitDialogOpen, refreshPushAvailability]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
@@ -352,20 +366,6 @@ export default function GitDiffModal({
     }
   }
 
-  async function refreshPushAvailability() {
-    if (!projectSlug || !identifier) {
-      setCanPush(false);
-      return;
-    }
-
-    try {
-      const result = await getGitDiffSummaries(projectSlug, identifier);
-      setCanPush(result.summaries.some((summary) => summary.aheadCount > 0));
-    } catch {
-      setCanPush(false);
-    }
-  }
-
   async function generateMessage() {
     if (!projectSlug || !identifier) return;
 
@@ -554,7 +554,7 @@ export default function GitDiffModal({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(92vh,840px)] w-[calc(100vw-2rem)] max-w-[1200px] flex-col gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-2xl">
+      <DialogContent className="flex h-[min(92vh,840px)] min-w-0 w-[calc(100vw-2rem)] max-w-[1200px] flex-col gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-2xl">
         <DialogHeader className="min-h-11 border-b bg-background px-3 py-2">
           <DialogTitle className="text-sm font-semibold">{t("issue.diff.title")}</DialogTitle>
           <DialogDescription className="truncate text-[11px]">
@@ -562,8 +562,15 @@ export default function GitDiffModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex h-10 items-center justify-between gap-3 border-b bg-muted/20 px-2">
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as GitDiffType | "commits")}>
+        <div
+          className="flex min-h-10 min-w-0 shrink-0 flex-col items-stretch gap-1 overflow-hidden border-b bg-muted/20 px-2 py-1 sm:flex-row sm:items-center sm:gap-3 sm:py-0"
+          data-testid="git-diff-toolbar"
+        >
+          <Tabs
+            className="shrink-0"
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as GitDiffType | "commits")}
+          >
             <TabsList className="h-7 rounded-md bg-background p-0.5">
               <TabsTrigger value="branch" className="h-6 gap-1 px-2 text-[11px]">
                 <GitBranch className="h-3.5 w-3.5" />
@@ -581,10 +588,18 @@ export default function GitDiffModal({
               ) : null}
             </TabsList>
           </Tabs>
-          <div className="flex items-center gap-2 text-xs tabular-nums">
-            <span className="text-[11px] text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
-            <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
-            <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
+          <div
+            className="flex w-full min-w-0 shrink-0 items-center justify-between gap-1 overflow-x-auto text-xs tabular-nums [scrollbar-width:thin] sm:ml-auto sm:w-auto sm:justify-start sm:gap-2"
+            data-testid="git-diff-actions"
+          >
+            <span
+              className="hidden shrink-0 items-center gap-2 sm:inline-flex"
+              data-testid="git-diff-stats"
+            >
+              <span className="text-[11px] text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
+              <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
+              <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
+            </span>
             <ViewModeToggle viewMode={viewMode} onChange={handleViewModeChange} />
             {reviewEnabled && reviewComments.length + commitNotes.filter((note) => note.note.trim()).length > 0 ? (
               <Button
@@ -639,8 +654,14 @@ export default function GitDiffModal({
         {showUncommittedEmpty ? (
           <UncommittedEmptyState onRefresh={() => void refetchDiff()} onViewBranch={() => setActiveTab("branch")} />
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
-            <aside className="flex min-h-0 flex-col overflow-hidden border-r">
+          <div
+            className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(9rem,2fr)_minmax(12rem,3fr)] bg-background md:grid-cols-[20rem_minmax(0,1fr)] md:grid-rows-1"
+            data-testid="git-diff-workspace"
+          >
+            <aside
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b md:border-b-0 md:border-r"
+              data-testid="git-diff-file-pane"
+            >
               {activeTab === "commits" ? (
                 <div className="flex min-h-0 flex-1 flex-col">
                   <CommitList
@@ -697,7 +718,10 @@ export default function GitDiffModal({
                 </div>
               )}
             </aside>
-            <section className="flex min-h-0 flex-col overflow-hidden">
+            <section
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+              data-testid="git-diff-viewer-pane"
+            >
               {activeTab === "commits" && selectedCommit ? (
                 <div className="shrink-0 border-b bg-muted/10 px-3 py-2">
                   <label className="text-[11px] font-medium text-muted-foreground" htmlFor="workspace-commit-note">

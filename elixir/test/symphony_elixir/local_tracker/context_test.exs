@@ -173,6 +173,17 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert second_issue.status.name == "Backlog"
   end
 
+  test "create_issue does not reuse an identifier after a task is deleted" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, first_issue} = Context.create_issue("macro-markets", %{title: "First", status: "Todo"})
+
+    assert {:ok, _deleted} = Context.delete_issue("macro-markets", first_issue.identifier)
+    assert {:ok, replacement} = Context.create_issue("macro-markets", %{title: "Replacement", status: "Todo"})
+
+    assert first_issue.identifier == "MAC-1"
+    assert replacement.identifier == "MAC-2"
+  end
+
   test "archive_issue hides the issue from the board and restore_issue brings it back" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Archive me", status: "Todo"})

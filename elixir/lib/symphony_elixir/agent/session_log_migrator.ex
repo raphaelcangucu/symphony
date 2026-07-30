@@ -21,6 +21,8 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
 
+  @migration_thread_fields [:id, :workspace_path, :agent_kind]
+
   @type result :: %{
           created: non_neg_integer(),
           migrated: non_neg_integer(),
@@ -138,8 +140,15 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   end
 
   defp candidate_workspaces(nil) do
-    Context.list_projects()
-    |> Enum.flat_map(fn project -> candidate_workspaces(project.slug) end)
+    # This function is invoked by the historical 20260717120000 data
+    # migration.  Do not hydrate the current Project schema here: newer
+    # fields (for example `last_issue_number`) may not exist yet while that
+    # migration is being applied to a fresh database.
+    Repo.query!(
+      "SELECT slug FROM local_tracker_projects WHERE archived_at IS NULL ORDER BY name"
+    )
+    |> Map.fetch!(:rows)
+    |> Enum.flat_map(fn [slug] -> candidate_workspaces(slug) end)
   end
 
   defp candidate_workspaces(project_slug) when is_binary(project_slug) do
@@ -178,7 +187,10 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   end
 
   defp list_threads(nil) do
-    from(t in Thread, where: not is_nil(t.workspace_path) and t.workspace_path != "")
+    from(t in Thread,
+      where: not is_nil(t.workspace_path) and t.workspace_path != "",
+      select: struct(t, ^@migration_thread_fields)
+    )
     |> Repo.all()
   end
 
@@ -186,7 +198,8 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
     slug = String.trim(project_slug)
 
     from(t in Thread,
-      where: not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug
+      where: not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug,
+      select: struct(t, ^@migration_thread_fields)
     )
     |> Repo.all()
   end

@@ -202,6 +202,24 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert is_binary(History.current_turn(updated)["last_activity_at"])
   end
 
+  test "late activity from an orphan worker cannot mutate an interrupted turn", %{
+    thread: thread
+  } do
+    assert {:ok, running} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
+
+    assert {:ok, interrupted} = History.interrupt_turn_state(running, "serve_restart")
+    interrupted_turn = History.current_turn(interrupted)
+
+    assert {:ok, unchanged} = History.touch_turn_activity(running)
+    assert History.current_turn(unchanged) == interrupted_turn
+
+    assert {:ok, unchanged} =
+             History.upsert_active_tool(running, %{"id" => "late-tool", "name" => "Bash"})
+
+    assert History.current_turn(unchanged) == interrupted_turn
+  end
+
   test "terminal turn states clear active_tools", %{thread: thread} do
     assert {:ok, thread} =
              History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
@@ -310,11 +328,15 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert {:ok, preferences} =
              History.set_turn_preferences(original, %{
                execution_mode: "build",
-               skill_profile: "default"
+               skill_profile: "default",
+               model: "gpt-5.6",
+               effort: "high"
              })
 
     assert History.current_turn(preferences)["prompt"] == "running"
     assert Enum.map(History.pending_turns(preferences), & &1["id"]) == [entry["id"]]
+    assert History.requested_model(preferences) == "gpt-5.6"
+    assert History.requested_effort(preferences) == "high"
 
     assert {:ok, goal} = History.set_goal_mode(original, true, "Finish safely")
     assert History.current_turn(goal)["prompt"] == "running"
@@ -384,6 +406,10 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert Enum.map(History.pending_turns(reloaded), & &1["prompt"]) == ["first", "second"]
     assert first["id"] != second["id"]
     assert History.turn_payload(reloaded).queued_count == 2
+    assert History.turn_payload(reloaded).queued_messages == [
+             %{id: first["id"], message: "first", provider: "codex"},
+             %{id: second["id"], message: "second", provider: "claude"}
+           ]
 
     assert {:ok, updated, ^first} = History.take_pending_turn(reloaded)
     assert Enum.map(History.pending_turns(updated), & &1["prompt"]) == ["second"]

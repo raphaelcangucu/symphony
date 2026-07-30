@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.AgentRunner
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.Context
@@ -66,6 +67,22 @@ defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
     assert AgentRunner.model_provenance_update(%{resolved_model: nil, resolved_effort: nil}) == nil
   end
 
+  test "provider_binding_update emits the provider-confirmed conversation identity" do
+    assert %{
+             event: :provider_binding,
+             provider: "claude",
+             conversation_id: "claude-native-session-7",
+             session_id: "claude-native-session-7",
+             timestamp: %DateTime{}
+           } =
+             AgentRunner.provider_binding_update(%{
+               provider: "claude",
+               conversation_id: "claude-native-session-7"
+             })
+
+    assert AgentRunner.provider_binding_update(%{provider: "claude", conversation_id: nil}) == nil
+  end
+
   test "provider-confirmed provenance advances into the next orchestrator turn" do
     session = %{
       resolved_model: "gpt-5.5",
@@ -88,6 +105,26 @@ defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
     }
 
     assert AgentRunner.advance_session(turn_two_session, turn_two) == turn_two_session
+  end
+
+  test "provider-confirmed conversation advances into the next orchestrator turn" do
+    session = %{cli_session_id: nil, metadata: %{}}
+
+    assert %{cli_session_id: "cursor-native-session-9"} =
+             AgentRunner.advance_session(session, %{
+               provider: "cursor",
+               conversation_id: "cursor-native-session-9"
+             })
+  end
+
+  test "put_conversation_ref resumes only a binding owned by the selected provider" do
+    ref = %ConversationRef{provider: "cursor", conversation_id: "cursor-native-session-10"}
+
+    assert [conversation_ref: ^ref] =
+             AgentRunner.put_conversation_ref([], [conversation_ref: ref], "cursor")
+
+    assert [] = AgentRunner.put_conversation_ref([], [conversation_ref: ref], "claude")
+    assert [] = AgentRunner.put_conversation_ref([], [], "cursor")
   end
 
   test "agent_settings_opts omits keys that were never set" do

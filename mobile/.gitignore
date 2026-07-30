@@ -1,0 +1,16 @@
+.expo/
+.idea/
+.DS_Store
+dist/
+node_modules/
+npm-debug.log*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+android/
+ios/
+artifacts/

@@ -34,7 +34,7 @@ defmodule SymphonyElixir.IssueDispatch do
   # Compile-time copy of the canonical list so it can be used in guards.
   @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
 
-  @type action :: :resume | :hard_reset | :stop | :continue_work
+  @type action :: :orchestrate | :resume | :hard_reset | :stop | :continue_work
   @type opts :: %{
           optional(:agent) => String.t() | nil,
           optional(:goal) => String.t() | nil,
@@ -48,6 +48,20 @@ defmodule SymphonyElixir.IssueDispatch do
   @spec resume(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
   def resume(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
     dispatch(project, identifier, :resume, opts)
+  end
+
+  @doc """
+  Starts a task-native orchestration run.
+
+  Unlike a direct assistant session, this requires the task's persisted agent,
+  model, effort and orchestration execution path. The orchestrator then owns
+  the resulting `issue_execution` session and its event log.
+  """
+  @spec orchestrate(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
+  def orchestrate(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
+    with :ok <- orchestration_ready?(project.slug, identifier) do
+      dispatch(project, identifier, :orchestrate, opts)
+    end
   end
 
   @spec restart(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
@@ -98,7 +112,7 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp dispatch(%Project{} = project, identifier, action, opts)
-       when action in [:resume, :hard_reset, :continue_work] do
+       when action in [:orchestrate, :resume, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          agent_kind = effective_agent_kind(project, issue, opts),
          opts = inject_context_refs(project, identifier, opts),
@@ -111,7 +125,7 @@ defmodule SymphonyElixir.IssueDispatch do
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
          :ok <- maybe_append_resume_boundary(project, identifier, issue, action),
-         :ok <- nudge_manual_dispatch(identifier),
+         {:ok, dispatch_state} <- nudge_manual_dispatch(identifier),
          :ok <- maybe_record_dispatch_activity(project, identifier, action, opts) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
 
@@ -119,7 +133,9 @@ defmodule SymphonyElixir.IssueDispatch do
        %{
          action: Atom.to_string(action),
          message: dispatch_message(action, reloaded),
-         issue: TrackerPresenter.issue(reloaded)
+         issue: TrackerPresenter.issue(reloaded),
+         already_running: Map.get(dispatch_state, :already_running, false),
+         execution_session_id: Map.get(dispatch_state, :execution_session_id)
        }}
     end
   end
@@ -172,6 +188,18 @@ defmodule SymphonyElixir.IssueDispatch do
   defp comment_body(action, instructions) do
     base =
       case action do
+        :orchestrate ->
+          """
+          ## Start task orchestration (tracker)
+
+          Execute this task through Symphony's orchestrator. Keep all progress, execution events, evidence, and final status attached to this task's execution session; do not create an interactive authoring chat.
+
+          **Priority:**
+          1. Read the task and existing workspace context before changing files.
+          2. Work only on the requested task objective.
+          3. Capture the required validation and durable evidence before handoff.
+          """
+
         :resume ->
           """
           ## Resume agent run (tracker)
@@ -340,10 +368,11 @@ defmodule SymphonyElixir.IssueDispatch do
   defp execution_thread_agent_kind(_project_slug, _identifier), do: nil
 
   defp maybe_hard_reset(%Project{} = project, identifier, %IssueDTO{} = issue, :hard_reset) do
-    stop_active_run(identifier)
-    clear_agent_session(project, identifier, issue)
-    archive_execution_session(project, identifier)
-    :ok
+    with :ok <- stop_active_run(identifier),
+         :ok <- archive_execution_session(project, identifier),
+         :ok <- clear_agent_session(project, identifier, issue) do
+      :ok
+    end
   end
 
   defp maybe_hard_reset(_project, _identifier, _issue, _action), do: :ok
@@ -357,7 +386,7 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp maybe_append_resume_boundary(project, identifier, issue, action)
-       when action in [:resume, :continue_work] do
+       when action in [:orchestrate, :resume, :continue_work] do
     workspace = run_workspace(project, identifier, issue)
 
     if File.dir?(workspace) do
@@ -380,7 +409,7 @@ defmodule SymphonyElixir.IssueDispatch do
       {:error, reason} ->
         Logger.warning("Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}")
 
-        :ok
+        {:error, {:hard_reset_archive_failed, reason}}
     end
   end
 
@@ -526,11 +555,43 @@ defmodule SymphonyElixir.IssueDispatch do
 
   defp nudge_manual_dispatch(identifier) do
     case Orchestrator.request_dispatch(identifier) do
-      {:ok, _result} -> :ok
-      :unavailable -> :ok
+      {:ok, result} -> {:ok, result}
+      :unavailable -> {:ok, %{}}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp orchestration_ready?(project_slug, identifier) do
+    case Context.get_agent_settings(project_slug, identifier) do
+      {:ok,
+       %{
+         execution_path: "orchestrator",
+         agent_kind: agent,
+         model: model,
+         effort: effort,
+         target_repository: target_repository
+       }}
+      when is_binary(agent) and agent != "" and is_binary(model) and model != "" and
+             is_binary(effort) and effort != "" ->
+        if multi_repository_project?(project_slug) and not is_binary(target_repository) do
+          {:error, :orchestration_not_configured}
+        else
+          :ok
+        end
+
+      _ ->
+        {:error, :orchestration_not_configured}
+    end
+  end
+
+  defp multi_repository_project?(project_slug) do
+    Context.list_repositories(project_slug)
+    |> length()
+    |> Kernel.>(1)
+  end
+
+  defp dispatch_message(:orchestrate, %IssueDTO{identifier: identifier}),
+    do: dgettext("dispatch", "Starting task orchestration for %{identifier}", identifier: identifier)
 
   defp dispatch_message(:resume, %IssueDTO{identifier: identifier}),
     do: dgettext("dispatch", "Resuming agent work on %{identifier}", identifier: identifier)

@@ -65,19 +65,15 @@ defmodule SymphonyElixir.Orchestrator.RunUpdate do
   defp session_id_for_update(_existing, %{session_id: session_id}) when is_binary(session_id),
     do: session_id
 
+  defp session_id_for_update(_existing, %{conversation_id: conversation_id})
+       when is_binary(conversation_id),
+       do: conversation_id
+
   defp session_id_for_update(existing, _update), do: existing
 
-  defp turn_count_for_update(existing_count, existing_session_id, %{
-         event: :session_started,
-         session_id: session_id
-       })
-       when is_integer(existing_count) and is_binary(session_id) do
-    if session_id == existing_session_id do
-      existing_count
-    else
-      existing_count + 1
-    end
-  end
+  defp turn_count_for_update(existing_count, _existing_session_id, %{event: :session_started})
+       when is_integer(existing_count),
+       do: existing_count + 1
 
   defp turn_count_for_update(existing_count, _existing_session_id, _update)
        when is_integer(existing_count),

@@ -49,13 +49,28 @@ defmodule SymphonyElixir.Orchestrator.RunUpdateTest do
     assert entry.turn_count == 3
   end
 
-  test "keeps the turn count when the same session restarts" do
+  test "uses a provider conversation id as the canonical runtime session id" do
+    running = %{session_id: nil, turn_count: 0}
+
+    {entry, _delta} =
+      RunUpdate.integrate(running, %{
+        event: :session_started,
+        timestamp: @timestamp,
+        provider: "codex",
+        conversation_id: "codex-native-thread-11"
+      })
+
+    assert entry.session_id == "codex-native-thread-11"
+    assert entry.turn_count == 1
+  end
+
+  test "increments the turn count when the same native conversation starts another turn" do
     running = %{session_id: "s1", turn_count: 2}
     update = %{event: :session_started, timestamp: @timestamp, session_id: "s1"}
 
     {entry, _delta} = RunUpdate.integrate(running, update)
 
-    assert entry.turn_count == 2
+    assert entry.turn_count == 3
   end
 
   test "clears the goal on a thread/goal/cleared payload" do

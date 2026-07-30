@@ -10,6 +10,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     History,
     NativeThreadNames,
     ProjectExploreWorkspace,
+    Thread,
     TitleGenerator
   }
 
@@ -88,11 +89,24 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   @spec create(Conn.t(), map()) :: Conn.t()
-  def create(conn, %{"scope" => "freeform", "workspace_path" => _workspace_path}) do
+  def create(conn, params) do
+    with {:ok, request_id} <- client_request_id(conn),
+         nil <- existing_request_thread(request_id) do
+      do_create(conn, put_client_request_id(params, request_id))
+    else
+      %Thread{} = thread ->
+        json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+
+      {:error, :invalid_client_request_id} ->
+        TrackerErrors.validation_msg(conn, "Idempotency-Key must contain 1 to 128 characters")
+    end
+  end
+
+  defp do_create(conn, %{"scope" => "freeform", "workspace_path" => _workspace_path}) do
     TrackerErrors.validation_msg(conn, "workspace_path is not supported for freeform threads")
   end
 
-  def create(conn, %{"scope" => "freeform"} = params) do
+  defp do_create(conn, %{"scope" => "freeform"} = params) do
     case create_freeform_with_workspace(params) do
       {:ok, thread} ->
         conn
@@ -104,10 +118,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  def create(
-        conn,
-        %{"scope" => "project_session", "project_slug" => project_slug, "workspace_path" => workspace_path} = params
-      ) do
+  defp do_create(
+         conn,
+         %{"scope" => "project_session", "project_slug" => project_slug, "workspace_path" => workspace_path} = params
+       ) do
     attrs = project_session_attrs(params)
 
     with {:ok, %{path: normalized_path}} <- PathOwnership.validate(project_slug, workspace_path),
@@ -119,7 +133,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  def create(conn, %{"scope" => "project_session", "project_slug" => project_slug} = params) do
+  defp do_create(conn, %{"scope" => "project_session", "project_slug" => project_slug} = params) do
     attrs = project_session_attrs(params)
 
     with {:ok, thread} <- History.create_project_session_thread(project_slug, attrs) do
@@ -133,15 +147,15 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  def create(
-        conn,
-        %{
-          "scope" => "issue_session",
-          "project_slug" => project_slug,
-          "issue_identifier" => issue_identifier,
-          "workspace_path" => workspace_path
-        } = params
-      ) do
+  defp do_create(
+         conn,
+         %{
+           "scope" => "issue_session",
+           "project_slug" => project_slug,
+           "issue_identifier" => issue_identifier,
+           "workspace_path" => workspace_path
+         } = params
+       ) do
     with {:ok, ownership} <-
            PathOwnership.validate_issue(project_slug, workspace_path, issue_identifier),
          attrs <- Map.put(issue_session_attrs(params), :workspace_kind, ownership.workspace_kind),
@@ -158,11 +172,21 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  def create(conn, %{"scope" => "issue_session", "project_slug" => _project_slug, "workspace_path" => _workspace_path}) do
+  defp do_create(
+         conn,
+         %{"scope" => "issue_session", "project_slug" => _project_slug, "workspace_path" => _workspace_path}
+       ) do
     TrackerErrors.validation_msg(conn, "issue_identifier is required")
   end
 
-  def create(conn, %{"scope" => "issue_session", "project_slug" => project_slug, "issue_identifier" => issue_identifier} = params) do
+  defp do_create(
+         conn,
+         %{
+           "scope" => "issue_session",
+           "project_slug" => project_slug,
+           "issue_identifier" => issue_identifier
+         } = params
+       ) do
     attrs = issue_session_attrs(params)
 
     with {:ok, thread} <- History.create_issue_session_thread(project_slug, issue_identifier, attrs) do
@@ -176,7 +200,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  def create(conn, _params) do
+  defp do_create(conn, _params) do
     TrackerErrors.validation_msg(conn, "scope must be freeform, project_session, or issue_session")
   end
 
@@ -208,8 +232,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
     with {:ok, id} <- parse_thread_id(raw_id),
          {:ok, agent_kind} <- parse_optional_agent_kind(params),
+         {:ok, permission_level} <- parse_optional_permission_level(params),
          {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs),
          {:ok, thread} <- maybe_set_thread_agent(thread, agent_kind),
+         {:ok, thread} <- maybe_set_thread_permission_level(thread, permission_level),
          thread <- maybe_sync_native_title(thread, attrs) do
       json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
     else
@@ -223,6 +249,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
         TrackerErrors.validation_msg(
           conn,
           "agent_kind must be one of: #{Enum.join(@agent_kinds, ", ")}"
+        )
+
+      {:error, :invalid_permission_level} ->
+        TrackerErrors.validation_msg(
+          conn,
+          "permission_level must be one of: ask_for_approval, approve_for_me, full_access"
         )
 
       {:error, :invalid_title} ->
@@ -436,8 +468,26 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     History.set_thread_agent(thread, agent_kind)
   end
 
+  defp parse_optional_permission_level(params) when is_map(params) do
+    if Map.has_key?(params, "permission_level") do
+      case params["permission_level"] do
+        level when level in ~w(ask_for_approval approve_for_me full_access) -> {:ok, level}
+        _ -> {:error, :invalid_permission_level}
+      end
+    else
+      {:ok, :unchanged}
+    end
+  end
+
+  defp maybe_set_thread_permission_level(thread, :unchanged), do: {:ok, thread}
+
+  defp maybe_set_thread_permission_level(thread, permission_level) when is_binary(permission_level) do
+    History.set_thread_permission_level(thread, permission_level)
+  end
+
   defp issue_session_attrs(params) do
     %{
+      client_request_id: params["client_request_id"],
       title: params["title"],
       agent_kind: normalize_agent(params["agent_kind"]),
       execution_mode: params["execution_mode"] || params["mode"],
@@ -452,6 +502,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   defp project_session_attrs(params) do
     %{
+      client_request_id: params["client_request_id"],
       title: params["title"],
       agent_kind: normalize_agent(params["agent_kind"]),
       model: params["model"],
@@ -480,6 +531,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   # document viewer scopes reads to this thread instead of the shared parent.
   defp create_freeform_with_workspace(params) do
     attrs = %{
+      client_request_id: params["client_request_id"],
       title: params["title"],
       workspace_path: AgentSession.freeform_workspace_root(),
       agent_kind: normalize_agent(params["agent_kind"]),
@@ -499,6 +551,29 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     |> put_status(:created)
     |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
   end
+
+  defp client_request_id(conn) do
+    case get_req_header(conn, "idempotency-key") do
+      [] ->
+        {:ok, nil}
+
+      [value] when is_binary(value) ->
+        trimmed = String.trim(value)
+
+        if byte_size(trimmed) in 1..128,
+          do: {:ok, trimmed},
+          else: {:error, :invalid_client_request_id}
+
+      _ ->
+        {:error, :invalid_client_request_id}
+    end
+  end
+
+  defp existing_request_thread(nil), do: nil
+  defp existing_request_thread(request_id), do: History.thread_by_client_request_id(request_id)
+
+  defp put_client_request_id(params, nil), do: params
+  defp put_client_request_id(params, request_id), do: Map.put(params, "client_request_id", request_id)
 
   defp render_create_error(conn, {:validation, :invalid_workspace_path}) do
     TrackerErrors.validation_msg(conn, "workspace_path must be an absolute owned workspace path")

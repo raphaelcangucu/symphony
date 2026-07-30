@@ -62,7 +62,11 @@ vi.mock("@/components/issues/IssueCreateDialog", () => ({
 function renderHeader(pollingActive: boolean) {
   return render(
     <MemoryRouter>
-      <ProjectHeader projectSlug="macro-markets" trackerKind="github" pollingActive={pollingActive} />
+      <ProjectHeader
+        projectSlug="macro-markets"
+        trackerKind="github"
+        pollingActive={pollingActive}
+      />
     </MemoryRouter>,
   );
 }
@@ -75,13 +79,44 @@ describe("ProjectHeader polling indicator", () => {
   it("renders the project identity as a project switcher trigger", () => {
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="distributionmachine" title="Distribution Machine" trackerKind="local" />
+        <ProjectHeader
+          projectSlug="distributionmachine"
+          title="Distribution Machine"
+          trackerKind="local"
+        />
       </MemoryRouter>,
     );
 
     const trigger = screen.getByRole("button", { name: "Switch project" });
     expect(trigger).toHaveTextContent("Distribution Machine");
     expect(trigger).toHaveTextContent("distributionmachine");
+  });
+
+  it("keeps the mobile project header in one horizontal scroll row", () => {
+    render(
+      <MemoryRouter>
+        <ProjectHeader
+          projectSlug="distributionmachine"
+          title="Distribution Machine"
+          trackerKind="local"
+          rightSlot={<button type="button">Assistant</button>}
+        />
+      </MemoryRouter>,
+    );
+
+    const header = screen.getByRole("banner");
+    expect(header).toHaveClass(
+      "flex-nowrap",
+      "overflow-x-auto",
+      "justify-start",
+    );
+    expect(header.firstElementChild).toHaveClass("shrink-0");
+    expect(
+      screen.getByRole("navigation", { name: "Project views" }).parentElement,
+    ).toHaveClass("shrink-0");
+
+    const slug = screen.getByText("distributionmachine");
+    expect(slug).toHaveClass("hidden", "sm:block");
   });
 
   it("shows List when on the board view and Board otherwise", () => {
@@ -108,11 +143,17 @@ describe("ProjectHeader polling indicator", () => {
   it("shows the project sessions count in the sessions navigation item", () => {
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="local" sessionsCount={22} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="local"
+          sessionsCount={22}
+        />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /Workspaces\s+22/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Workspaces\s+22/ }),
+    ).toBeInTheDocument();
   });
 
   it("labels the knowledge base nav item as KB", () => {
@@ -128,12 +169,16 @@ describe("ProjectHeader polling indicator", () => {
   it("labels the indicator active when polling is active", () => {
     renderHeader(true);
     expect(screen.getByLabelText("Polling active")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Polling paused (window not focused)")).toBeNull();
+    expect(
+      screen.queryByLabelText("Polling paused (window not focused)"),
+    ).toBeNull();
   });
 
   it("labels the indicator paused when polling is inactive", () => {
     renderHeader(false);
-    expect(screen.getByLabelText("Polling paused (window not focused)")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Polling paused (window not focused)"),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Polling active")).toBeNull();
   });
 
@@ -144,7 +189,9 @@ describe("ProjectHeader polling indicator", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByLabelText("Polling active")).toBeNull();
-    expect(screen.queryByLabelText("Polling paused (window not focused)")).toBeNull();
+    expect(
+      screen.queryByLabelText("Polling paused (window not focused)"),
+    ).toBeNull();
   });
 
   it("shows a sync error badge when background sync is failing", () => {
@@ -158,13 +205,20 @@ describe("ProjectHeader polling indicator", () => {
 
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="github"
+          syncState={syncState}
+        />
       </MemoryRouter>,
     );
 
     const badge = screen.getByLabelText("Sync error");
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute("title", expect.stringContaining(":remote_unavailable"));
+    expect(badge).toHaveAttribute(
+      "title",
+      expect.stringContaining(":remote_unavailable"),
+    );
   });
 
   it("copies a debug-friendly sync error report to the clipboard when clicked", async () => {
@@ -184,7 +238,11 @@ describe("ProjectHeader polling indicator", () => {
 
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="github"
+          syncState={syncState}
+        />
       </MemoryRouter>,
     );
 
@@ -221,7 +279,11 @@ describe("ProjectHeader polling indicator", () => {
 
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="github"
+          syncState={syncState}
+        />
       </MemoryRouter>,
     );
 
@@ -241,7 +303,11 @@ describe("ProjectHeader polling indicator", () => {
 
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="github"
+          syncState={syncState}
+        />
       </MemoryRouter>,
     );
 
@@ -259,7 +325,11 @@ describe("ProjectHeader polling indicator", () => {
 
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" trackerKind="local" syncState={syncState} />
+        <ProjectHeader
+          projectSlug="macro-markets"
+          trackerKind="local"
+          syncState={syncState}
+        />
       </MemoryRouter>,
     );
 
@@ -281,10 +351,14 @@ describe("ProjectHeader polling indicator", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Quick create" }),
+    );
     await user.click(screen.getByRole("button", { name: "emit header issue" }));
 
     expect(onIssueCreated).toHaveBeenCalledWith(createdIssue);
-    expect(screen.queryByRole("button", { name: "emit header issue" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "emit header issue" }),
+    ).toBeNull();
   });
 });

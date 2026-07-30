@@ -6,7 +6,16 @@ Symphony:
 - sessão interativa;
 - issue despachado pelo orquestrador.
 
-A matriz fixa modelo e esforço e contém 18 células:
+A execução padrão usa a matriz focada `dev10x-brand-high`, com 6 células:
+sessão e orquestrador para Codex `gpt-5.6-sol` high, Cursor
+`cursor-grok-4.5-high` e Claude `claude-opus-5` high. No Cursor, o esforço high
+é parte do slug canônico; por isso os campos separados de esforço solicitado e
+resolvido permanecem nulos.
+
+Para a validação mobile, `providers-current-default` mantém outras seis células:
+sessão e orquestrador com Codex `gpt-5.6-sol` low, Cursor `auto` e Claude
+`claude-opus-5` xhigh. As 18 células anteriores continuam definidas para
+reprodução histórica:
 
 - `providers-default`: sessão e orquestrador com Codex `gpt-5.5` medium,
   Claude `claude-sonnet-5` medium e Cursor `composer-2.5`;
@@ -18,9 +27,10 @@ A matriz fixa modelo e esforço e contém 18 células:
 O prompt canônico fica em [`prompt.md`](prompt.md); seu SHA-256 é gravado em
 todas as execuções para impedir comparações com instruções diferentes. Cada
 célula também valida o agente, o modelo solicitado, o modelo confirmado pelo
-provedor e o esforço. O adapter Cursor resolve nomes e identificadores nativos
-contra o catálogo vivo e persiste um único slug canônico. Como o esforço está
-codificado no slug do Cursor, os dois campos de esforço permanecem nulos.
+provedor e o esforço. O adapter Cursor resolve identificadores selecionáveis
+contra o catálogo vivo e preserva a confirmação nativa quando o roteador
+`auto` devolve um identificador dinâmico fora desse catálogo. Como o esforço
+está codificado no slug do Cursor, os dois campos de esforço permanecem nulos.
 
 ## Contrato
 
@@ -48,24 +58,41 @@ Use uma instância dedicada do Symphony e um diretório de runtime descartável:
 export SYMPHONY_BENCH_URL=http://127.0.0.1:4010
 export SYMPHONY_BENCH_RUNTIME=/caminho/absoluto/para/runtime
 export SYMPHONY_BENCH_TOKEN=<mesmo-token-da-instancia-dedicada>
+export SYMPHONY_BENCH_MATRIX=dev10x-brand-high
+export SYMPHONY_BENCH_CONCURRENCY=3
 
 npm install
 npm run provision
+npm run run:brand-high
+npm run collect
+npm run capture:visuals
 ```
 
-Execute uma matriz por vez, ou células independentes em paralelo quando houver
-capacidade. Os testes unitários do Symphony continuam focados e sequenciais:
+`npm run provision` usa `dev10x-brand-high` por padrão, mesmo sem a variável
+explícita. Para reproduzir uma matriz histórica, defina
+`SYMPHONY_BENCH_MATRIX` com o nome dela antes de provisionar. Execute uma matriz
+por vez, ou células independentes em paralelo quando houver capacidade. Os
+testes unitários do Symphony continuam focados e sequenciais:
 
 ```bash
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:default
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:advanced
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:codex-5.6
+SYMPHONY_BENCH_CONCURRENCY=1 npm run run:current-default
 ```
 
 Para repetir apenas uma célula, use
 `SYMPHONY_BENCH_RUN_ID=<id> npm run run:cell`.
 O runner limita a concorrência a seis células e, se houver falhas, aguarda as
 demais células do lote e apresenta um resumo agregado.
+
+Sessão e orquestrador compartilham uma única janela de settlement de 70
+minutos. Os limites externos têm cinco minutos adicionais em cada camada
+(Playwright, processo e célula) para que falhas ainda tenham tempo de registrar
+artefatos e encerrar uma execução remota. Quando uma célula do orquestrador
+falha, o runner envia `stop` e aguarda o estado terminal; o backend interrompe
+cooperativamente o runner do agente antes do fallback forçado, evitando deixar
+o processo do CLI ativo.
 
 Colete build/E2E e gere as capturas visuais padronizadas:
 
@@ -87,9 +114,15 @@ O runtime contém:
 - `results/<run-id>-collected.json`: contrato e validação independente;
 - `artifacts/<run-id>/attempts/`: vídeo e screenshot da UI real do Symphony;
 - `report/comparison.{json,md}`: matriz objetiva;
-- `report/visual-comparison.md`: heros e páginas completas no mesmo viewport;
-- `report/screens/`: capturas visuais padronizadas.
+- `report/visual-comparison.md`: comparação visual detalhada no mesmo viewport;
+- `report/screens/`: seis capturas por célula — hero, fluxo, seção de
+  evidências, página desktop completa, página mobile completa e aba Evidências
+  do Symphony;
 - `report/videos/`: WebM, MP4/H.264 e prévia GIF inline por célula.
+
+O manifesto canônico de cada célula registra as cinco capturas do site, os
+vídeos WebM e MP4/H.264 e o trace Playwright. A sexta captura demonstra os
+mesmos artefatos persistidos e renderizados na aba Evidências do Symphony.
 
 Os artefatos de runtime não são versionados: vídeos e traces podem ser grandes
 e podem conter caminhos locais do ambiente de execução.

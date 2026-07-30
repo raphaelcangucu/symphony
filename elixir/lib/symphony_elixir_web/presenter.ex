@@ -208,6 +208,10 @@ defmodule SymphonyElixirWeb.Presenter do
       state: entry.state,
       status: "live",
       session_id: entry.session_id,
+      # The agent transport session and the durable task-execution session are
+      # different concepts.  Mobile task details need the latter to open the
+      # existing execution rather than attempting a second dispatch.
+      execution_session_id: Map.get(entry, :execution_session_id),
       turn_count: Map.get(entry, :turn_count, 0),
       last_event: entry.last_codex_event,
       last_message: summarize_message(entry.last_codex_message),
@@ -247,6 +251,7 @@ defmodule SymphonyElixirWeb.Presenter do
   defp running_issue_payload(running) do
     %{
       session_id: running.session_id,
+      execution_session_id: Map.get(running, :execution_session_id),
       turn_count: Map.get(running, :turn_count, 0),
       state: running.state,
       started_at: iso8601(running.started_at),

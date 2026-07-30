@@ -6,6 +6,10 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
+  defmodule CrashingPushDispatcher do
+    def assistant_turn_completed(_thread, _status), do: raise("push delivery crashed")
+  end
+
   setup do
     migrate_repo()
     clean_repo()
@@ -43,6 +47,95 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.current_turn(done)["status"] == "completed"
     assert History.current_turn(done)["conversation_id"] == "ct"
     assert History.current_turn(done)["run_id"] == "tn"
+  end
+
+  test "a push delivery crash cannot restart the manager or orphan sibling turns", %{
+    thread: thread
+  } do
+    original_dispatcher =
+      Application.get_env(:symphony_elixir, :push_dispatcher)
+
+    Application.put_env(
+      :symphony_elixir,
+      :push_dispatcher,
+      CrashingPushDispatcher
+    )
+
+    on_exit(fn ->
+      if original_dispatcher do
+        Application.put_env(:symphony_elixir, :push_dispatcher, original_dispatcher)
+      else
+        Application.delete_env(:symphony_elixir, :push_dispatcher)
+      end
+    end)
+
+    manager = Process.whereis(TurnManager)
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:push_worker, self()})
+      receive do: (:finish -> :ok)
+      {:ok, %{assistant_message: "done"}}
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(thread.id, "finish safely",
+               run: run,
+               reply_to: self(),
+               trigger: "user"
+             )
+
+    assert_receive {:push_worker, ^worker}
+    send(worker, :finish)
+
+    assert_receive {:assistant_turn_finished, _execution_id, {:ok, _}}, 1_000
+    assert manager == Process.whereis(TurnManager)
+
+    assert {:ok, completed} = History.get_thread(thread.id)
+    assert History.current_turn(completed)["status"] == "completed"
+  end
+
+  test "a manager restart adopts the live worker instead of orphaning its turn", %{
+    thread: thread
+  } do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:restart_worker, self()})
+      receive do: (:finish_after_restart -> :ok)
+      {:ok, %{assistant_message: "survived"}}
+    end
+
+    assert {:ok, %{pid: worker, execution_id: execution_id}} =
+             TurnManager.start_turn(thread.id, "keep working", run: run, reply_to: self())
+
+    assert_receive {:restart_worker, ^worker}
+    old_manager = Process.whereis(TurnManager)
+    Process.exit(old_manager, :kill)
+
+    wait_until(fn ->
+      manager = Process.whereis(TurnManager)
+      is_pid(manager) and manager != old_manager
+    end)
+
+    assert TurnManager.running?(thread.id)
+    assert {:ok, running} = History.get_thread(thread.id)
+    assert History.current_turn(running)["status"] == "running"
+
+    send(worker, :finish_after_restart)
+
+    wait_until(fn ->
+      with {:ok, completed} <- History.get_thread(thread.id) do
+        History.current_turn(completed)["status"] == "completed"
+      else
+        _ -> false
+      end
+    end)
+
+    refute TurnManager.running?(thread.id)
+    assert {:ok, completed} = History.get_thread(thread.id)
+    assert History.current_turn(completed)["execution_id"] == execution_id
+    assert History.current_turn(completed)["status"] == "completed"
   end
 
   test "slow goal mutation on one thread does not block another thread", %{thread: thread_a} do
@@ -245,6 +338,37 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
 
     send(worker, :go)
     assert_receive {:assistant_turn_finished, _execution_id, _result}, 1_000
+  end
+
+  test "a concurrent replay with the same client message id is acknowledged atomically", %{
+    thread: thread
+  } do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:idempotent_worker, self()})
+      receive do: (:go -> :ok)
+      {:ok, %{}}
+    end
+
+    opts = [
+      run: run,
+      reply_to: self(),
+      client_message_id: "mobile-seed-42"
+    ]
+
+    assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "seed", opts)
+    assert_receive {:idempotent_worker, ^worker}, 1_000
+
+    assert {:ok, :duplicate} =
+             TurnManager.start_turn(
+               thread.id,
+               "seed",
+               Keyword.put(opts, :run, fn -> flunk("duplicate replay started a second worker") end)
+             )
+
+    send(worker, :go)
+    assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
   end
 
   test "abnormal worker exit interrupts the current turn (task_crash)", %{thread: thread} do

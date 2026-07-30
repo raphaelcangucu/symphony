@@ -23,7 +23,10 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
          :ok <- validate_manifest_issue(snapshot.manifest, issue_identifier),
          {:ok, record} <-
            Store.persist(project_slug, issue_identifier, workspace_path, snapshot.map,
-             session_id: to_string(thread.id),
+             # Direct issue sessions and the mobile evidence reconciler must use
+             # the same session key; otherwise requesting evidence through the
+             # two supported paths creates two durable records for one run.
+             session_id: "assistant-thread:#{thread.id}",
              evidence_dir: snapshot.evidence_dir,
              idempotent: true
            ) do

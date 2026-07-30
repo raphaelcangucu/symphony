@@ -320,6 +320,29 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     assert %{"data" => []} = json_response(conn, 200)
   end
 
+  test "push_thread pushes repositories resolved from the thread workspace", %{
+    issue: issue,
+    workspace: workspace
+  } do
+    repo = Path.join(workspace, "advising")
+    sh!(repo, "git add -A && git commit -m 'feat: thread push'")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("advising", issue.identifier, %{workspace_path: workspace})
+
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/assistant/threads/#{thread.id}/diff/push",
+        %{}
+      )
+
+    assert %{
+             "data" => [%{"repo" => "advising", "ok" => true}],
+             "workspace" => %{"path" => ^workspace, "available" => true}
+           } = json_response(conn, 200)
+  end
+
   test "generate_commit_message rejects clean workspaces", %{issue: issue} do
     commit_conn =
       post(

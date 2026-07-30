@@ -185,6 +185,20 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
     end
   end
 
+  @spec push_thread(Conn.t(), map()) :: Conn.t()
+  def push_thread(conn, %{"thread_id" => raw_id}) do
+    with {:ok, workspace} <- thread_workspace(raw_id),
+         {:ok, results} <- WorkspacePush.push(workspace) do
+      json(conn, %{
+        data: Enum.map(results, &push_json/1),
+        workspace: workspace_brief(workspace)
+      })
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+      :no_workspace -> json(conn, %{data: [], workspace: workspace_brief(nil)})
+    end
+  end
+
   @spec generate_commit_message(Conn.t(), map()) :: Conn.t()
   def generate_commit_message(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with {:ok, workspace} <- issue_workspace(project_slug, identifier),

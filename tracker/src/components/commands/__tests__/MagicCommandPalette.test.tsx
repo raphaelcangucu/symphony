@@ -86,7 +86,7 @@ describe("MagicCommandPalette", () => {
     expect(screen.getByText("Uncategorized", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("High")).toBeInTheDocument();
-    expect(screen.getByText("Plan")).toBeInTheDocument();
+    expect(screen.getByText("Ask for approval")).toBeInTheDocument();
 
     const input = screen.getByPlaceholderText("Search magic commands…");
     await user.type(input, "claude-opus-4-8");

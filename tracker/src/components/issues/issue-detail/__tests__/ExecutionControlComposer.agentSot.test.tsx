@@ -157,7 +157,9 @@ describe("ExecutionControlComposer agent source-of-truth", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /change agent to cursor/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /change agent to cursor/i }),
+    );
 
     await waitFor(() => {
       expect(updateAssistantThreadMock).toHaveBeenCalledWith(9001, { agentKind: "cursor" });
@@ -182,7 +184,9 @@ describe("ExecutionControlComposer agent source-of-truth", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /change agent to cursor/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /change agent to cursor/i }),
+    );
 
     await waitFor(() => {
       expect(updateIssueMock).toHaveBeenCalledWith(

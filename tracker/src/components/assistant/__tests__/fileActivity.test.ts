@@ -4,7 +4,13 @@ import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import type { AssistantToolCall } from "@/services/assistant";
 
 function call(partial: Partial<AssistantToolCall>): AssistantToolCall {
-  return { id: null, name: "read_workspace_file", status: "complete", result: {}, ...partial };
+  return {
+    id: null,
+    name: "read_workspace_file",
+    status: "complete",
+    result: {},
+    ...partial,
+  };
 }
 
 describe("fileActivityFromToolCall", () => {
@@ -28,9 +34,20 @@ describe("fileActivityFromToolCall", () => {
   });
 
   it("formats partial line ranges", () => {
-    expect(fileActivityFromToolCall(call({ arguments: { path: "a.ex", start_line: 5 } }))?.lineRange).toBe("L5–");
-    expect(fileActivityFromToolCall(call({ arguments: { path: "a.ex", end_line: 9 } }))?.lineRange).toBe("L–9");
-    expect(fileActivityFromToolCall(call({ arguments: { path: "a.ex" } }))?.lineRange).toBeNull();
+    expect(
+      fileActivityFromToolCall(
+        call({ arguments: { path: "a.ex", start_line: 5 } }),
+      )?.lineRange,
+    ).toBe("L5–");
+    expect(
+      fileActivityFromToolCall(
+        call({ arguments: { path: "a.ex", end_line: 9 } }),
+      )?.lineRange,
+    ).toBe("L–9");
+    expect(
+      fileActivityFromToolCall(call({ arguments: { path: "a.ex" } }))
+        ?.lineRange,
+    ).toBeNull();
   });
 
   it("maps an edit with diff counts", () => {
@@ -38,7 +55,12 @@ describe("fileActivityFromToolCall", () => {
       call({
         name: "apply_patch",
         status: "complete",
-        result: { diff: "@@\n+a\n+b\n-c", additions: 2, deletions: 1, paths: ["lib/foo.ex"] },
+        result: {
+          diff: "@@\n+a\n+b\n-c",
+          additions: 2,
+          deletions: 1,
+          paths: ["lib/foo.ex"],
+        },
       }),
     );
     expect(view?.kind).toBe("edit");
@@ -50,7 +72,10 @@ describe("fileActivityFromToolCall", () => {
 
   it("labels a multi-file edit by count", () => {
     const view = fileActivityFromToolCall(
-      call({ name: "apply_patch", result: { paths: ["a.ex", "b.ex"], additions: 3, deletions: 0 } }),
+      call({
+        name: "apply_patch",
+        result: { paths: ["a.ex", "b.ex"], additions: 3, deletions: 0 },
+      }),
     );
     expect(view?.kind).toBe("edit");
     expect(view?.path).toBeNull();
@@ -59,16 +84,50 @@ describe("fileActivityFromToolCall", () => {
 
   it("maps a command with output", () => {
     const view = fileActivityFromToolCall(
-      call({ name: "shell", status: "complete", arguments: { command: "mix test" }, output: "1 passed" }),
+      call({
+        name: "shell",
+        status: "complete",
+        arguments: { command: "mix test" },
+        output: "1 passed",
+      }),
     );
     expect(view?.kind).toBe("command");
     expect(view?.title).toBe("mix test");
     expect(view?.body).toEqual({ value: "1 passed", language: "bash" });
   });
 
+  it("removes the standard zsh launcher from a command title", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "shell",
+        status: "running",
+        arguments: { command: "/bin/zsh -lc 'sleep 10'" },
+      }),
+    );
+
+    expect(view?.title).toBe("sleep 10");
+    expect(view?.rawCommand).toBe("/bin/zsh -lc 'sleep 10'");
+  });
+
+  it("preserves command shapes that are not the standard zsh launcher", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "shell",
+        arguments: { command: 'bash -lc "mix test"' },
+      }),
+    );
+
+    expect(view?.title).toBe('bash -lc "mix test"');
+  });
+
   it("maps running and error statuses", () => {
-    expect(fileActivityFromToolCall(call({ status: "running" }))?.status).toBe("running");
-    expect(fileActivityFromToolCall(call({ name: "apply_patch", status: "error" }))?.status).toBe("error");
+    expect(fileActivityFromToolCall(call({ status: "running" }))?.status).toBe(
+      "running",
+    );
+    expect(
+      fileActivityFromToolCall(call({ name: "apply_patch", status: "error" }))
+        ?.status,
+    ).toBe("error");
   });
 
   it("treats Cursor Read as file read activity", () => {

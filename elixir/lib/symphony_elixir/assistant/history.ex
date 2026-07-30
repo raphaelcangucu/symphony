@@ -40,6 +40,11 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @spec thread_by_client_request_id(String.t()) :: Thread.t() | nil
+  def thread_by_client_request_id(client_request_id) when is_binary(client_request_id) do
+    Repo.get_by(Thread, client_request_id: client_request_id)
+  end
+
   @spec ensure_project_explore_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_project_explore_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
@@ -248,7 +253,7 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Persists agent mode + skill toolkit selection on the thread metadata.
+  Persists agent mode, model, effort and skill toolkit selection on the thread metadata.
 
   Used by the interactive session composer so the next join rehydrates the operator's
   Plan/Build/Yolo mode and Auto/Custom toolkit without requiring a migration.
@@ -266,6 +271,14 @@ defmodule SymphonyElixir.Assistant.History do
           "skill_profile",
           Map.get(attrs, :skill_profile) || Map.get(attrs, "skill_profile")
         )
+        |> maybe_put_meta_string(
+          "requested_model",
+          Map.get(attrs, :model) || Map.get(attrs, "model")
+        )
+        |> maybe_put_meta_string(
+          "requested_effort",
+          Map.get(attrs, :effort) || Map.get(attrs, "effort")
+        )
 
       {:update, next, nil}
     end)
@@ -282,6 +295,28 @@ defmodule SymphonyElixir.Assistant.History do
 
   def thread_execution_mode(_thread), do: nil
 
+  @permission_levels ~w(ask_for_approval approve_for_me full_access)
+
+  @spec thread_permission_level(Thread.t()) :: String.t() | nil
+  def thread_permission_level(%Thread{metadata: %{"permission_level" => level}})
+      when level in @permission_levels,
+      do: level
+
+  def thread_permission_level(_thread), do: nil
+
+  @spec set_thread_permission_level(Thread.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, :invalid_permission_level | term()}
+  def set_thread_permission_level(%Thread{} = thread, level)
+      when level in @permission_levels do
+    mutate_metadata(thread, fn current ->
+      {:update, Map.put(current.metadata || %{}, "permission_level", level), nil}
+    end)
+    |> without_mutation_value()
+  end
+
+  def set_thread_permission_level(%Thread{}, _level),
+    do: {:error, :invalid_permission_level}
+
   @spec thread_model(Thread.t()) :: String.t() | nil
   def thread_model(%Thread{resolved_model: model}) when is_binary(model), do: model
   def thread_model(%Thread{}), do: nil
@@ -291,10 +326,14 @@ defmodule SymphonyElixir.Assistant.History do
   def thread_effort(%Thread{}), do: nil
 
   @spec requested_model(Thread.t()) :: String.t() | nil
-  def requested_model(%Thread{requested_model: model}), do: model
+  def requested_model(%Thread{requested_model: model}) when is_binary(model) and model != "", do: model
+  def requested_model(%Thread{metadata: %{"requested_model" => model}}) when is_binary(model), do: model
+  def requested_model(%Thread{}), do: nil
 
   @spec requested_effort(Thread.t()) :: String.t() | nil
-  def requested_effort(%Thread{requested_effort: effort}), do: effort
+  def requested_effort(%Thread{requested_effort: effort}) when is_binary(effort) and effort != "", do: effort
+  def requested_effort(%Thread{metadata: %{"requested_effort" => effort}}) when is_binary(effort), do: effort
+  def requested_effort(%Thread{}), do: nil
 
   @spec resolved_model(Thread.t()) :: String.t() | nil
   def resolved_model(%Thread{resolved_model: model}), do: model
@@ -508,6 +547,7 @@ defmodule SymphonyElixir.Assistant.History do
       "conversation_id" => stringify(Map.get(attrs, :conversation_id)),
       "run_id" => stringify(Map.get(attrs, :run_id)),
       "execution_id" => stringify(Map.get(attrs, :execution_id)),
+      "client_message_id" => stringify(Map.get(attrs, :client_message_id)),
       "error" => nil,
       "error_code" => nil,
       "error_detail" => nil,
@@ -550,7 +590,7 @@ defmodule SymphonyElixir.Assistant.History do
     id = active_tool_id!(tool)
     tool = Map.put(tool, "id", id)
 
-    patch_current_turn(thread, fn turn ->
+    patch_running_turn(thread, fn turn ->
       tools =
         turn
         |> active_tools()
@@ -569,7 +609,7 @@ defmodule SymphonyElixir.Assistant.History do
   def remove_active_tool(%Thread{} = thread, tool_id) when is_binary(tool_id) do
     tool_id = active_tool_id!(%{"id" => tool_id})
 
-    patch_current_turn(thread, fn turn ->
+    patch_running_turn(thread, fn turn ->
       tools = Enum.reject(active_tools(turn), &(&1["id"] == tool_id))
 
       turn
@@ -583,7 +623,7 @@ defmodule SymphonyElixir.Assistant.History do
   @doc "Bumps the current turn activity timestamp."
   @spec touch_turn_activity(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def touch_turn_activity(%Thread{} = thread) do
-    patch_current_turn(thread, &Map.put(&1, "last_activity_at", now_iso()))
+    patch_running_turn(thread, &Map.put(&1, "last_activity_at", now_iso()))
   end
 
   @doc "Transition the current turn to completed."
@@ -686,6 +726,18 @@ defmodule SymphonyElixir.Assistant.History do
   def current_turn(%Thread{metadata: %{@current_turn_key => turn}}) when is_map(turn), do: turn
   def current_turn(%Thread{}), do: nil
 
+  @spec client_message_recorded?(integer(), String.t()) :: boolean()
+  def client_message_recorded?(thread_id, client_message_id)
+      when is_integer(thread_id) and is_binary(client_message_id) do
+    Repo.exists?(
+      from(message in Message,
+        where:
+          message.thread_id == ^thread_id and
+            message.client_message_id == ^client_message_id
+      )
+    )
+  end
+
   @doc "Returns durable pending turn intents in FIFO order."
   @spec pending_turns(Thread.t()) :: [map()]
   def pending_turns(%Thread{metadata: metadata}) when is_map(metadata) do
@@ -771,12 +823,24 @@ defmodule SymphonyElixir.Assistant.History do
   def turn_payload(nil), do: nil
 
   def turn_payload(%Thread{} = thread) do
-    queued_count = length(pending_turns(thread))
+    queued_messages = queued_message_payloads(thread)
+    queued_count = length(queued_messages)
 
     case turn_payload(current_turn(thread)) do
       nil when queued_count == 0 -> nil
-      nil -> %{status: "queued", can_resume: false, active_tools: [], queued_count: queued_count}
-      payload -> Map.put(payload, :queued_count, queued_count)
+      nil ->
+        %{
+          status: "queued",
+          can_resume: false,
+          active_tools: [],
+          queued_count: queued_count,
+          queued_messages: queued_messages
+        }
+
+      payload ->
+        payload
+        |> Map.put(:queued_count, queued_count)
+        |> Map.put(:queued_messages, queued_messages)
     end
   end
 
@@ -794,17 +858,42 @@ defmodule SymphonyElixir.Assistant.History do
       active_tools: active_tools(turn),
       last_activity_at: turn["last_activity_at"],
       queued_count: 0,
+      queued_messages: [],
       error: public_error_payload(turn["error_detail"])
     }
   end
 
-  @doc "On boot: flip every thread whose current turn is still `running` to interrupted(serve_restart)."
-  @spec reconcile_orphaned_turns() :: {:ok, non_neg_integer()}
-  def reconcile_orphaned_turns do
+  defp queued_message_payloads(%Thread{} = thread) do
+    thread
+    |> pending_turns()
+    |> Enum.map(fn entry ->
+      %{
+        id: entry["id"],
+        message: entry["prompt"],
+        provider: entry["provider"]
+      }
+    end)
+  end
+
+  @doc """
+  On boot, flip running turns without a live worker in `except_thread_ids` to
+  `interrupted(serve_restart)`.
+  """
+  @spec reconcile_orphaned_turns(keyword()) :: {:ok, non_neg_integer()}
+  def reconcile_orphaned_turns(opts \\ []) when is_list(opts) do
+    live_thread_ids =
+      opts
+      |> Keyword.get(:except_thread_ids, [])
+      |> MapSet.new()
+
     count =
       Thread
       |> Repo.all()
-      |> Enum.reduce(0, fn thread, acc -> acc + reconcile_orphaned_turn(thread) end)
+      |> Enum.reduce(0, fn thread, acc ->
+        if MapSet.member?(live_thread_ids, thread.id),
+          do: acc,
+          else: acc + reconcile_orphaned_turn(thread)
+      end)
 
     {:ok, count}
   end
@@ -1491,6 +1580,34 @@ defmodule SymphonyElixir.Assistant.History do
       end
     end)
     |> without_mutation_value()
+  end
+
+  defp patch_running_turn(%Thread{} = thread, fun) do
+    case current_turn(thread) do
+      %{"status" => "running"} = expected_turn ->
+        expected_identity = turn_identity(expected_turn)
+
+        mutate_metadata(thread, fn current ->
+          case current_turn(current) do
+            %{"status" => "running"} = turn ->
+              if turn_identity(turn) == expected_identity do
+                metadata =
+                  Map.put(current.metadata || %{}, @current_turn_key, fun.(turn))
+
+                {:update, metadata, nil}
+              else
+                {:noop, nil}
+              end
+
+            _ ->
+              {:noop, nil}
+          end
+        end)
+        |> without_mutation_value()
+
+      _ ->
+        {:ok, thread}
+    end
   end
 
   defp mutate_metadata(thread, mutation, retries_left \\ @cas_retries)
@@ -2270,12 +2387,22 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp normalize_message_attrs(attrs) do
     tool_calls = Map.get(attrs, :tool_calls, Map.get(attrs, "tool_calls", []))
+    metadata = Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
+
+    client_message_id =
+      Map.get(metadata, "client_message_id", Map.get(metadata, :client_message_id))
 
     attrs
     |> Map.delete(:tool_calls)
     |> Map.delete("tool_calls")
     |> Map.put(:tool_calls, normalize_tool_calls(tool_calls))
+    |> maybe_put_client_message_id(client_message_id)
   end
+
+  defp maybe_put_client_message_id(attrs, value) when is_binary(value) and value != "",
+    do: Map.put(attrs, :client_message_id, value)
+
+  defp maybe_put_client_message_id(attrs, _value), do: attrs
 
   defp normalize_tool_calls(tool_calls) when is_list(tool_calls), do: %{"calls" => tool_calls}
   defp normalize_tool_calls(%{"calls" => calls}) when is_list(calls), do: %{"calls" => calls}

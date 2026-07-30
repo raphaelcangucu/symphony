@@ -118,4 +118,47 @@ defmodule SymphonyElixir.OrchestratorSteerTest do
     assert {:error, :ActiveTurnNotSteerable} =
              Orchestrator.steer(orchestrator_name, "missing", "hello", self())
   end
+
+  test "manual dispatch is idempotent when the task is already running" do
+    issue_id = "issue-dispatch-running"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "512",
+      title: "Already running",
+      description: "Do not create a duplicate agent",
+      state: "In Progress",
+      url: "https://example.org/issues/512"
+    }
+
+    orchestrator_name = Module.concat(__MODULE__, :IdempotentDispatchOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn ->
+      if Process.alive?(pid), do: Process.exit(pid, :normal)
+    end)
+
+    initial_state = :sys.get_state(pid)
+
+    running_entry = %{
+      pid: self(),
+      ref: make_ref(),
+      identifier: issue.identifier,
+      issue: issue,
+      execution_session_id: 73,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn _ ->
+      %{initial_state | running: %{issue_id => running_entry}}
+    end)
+
+    assert {:ok,
+            %{
+              dispatched: false,
+              already_running: true,
+              issue_identifier: "512",
+              execution_session_id: 73
+            }} = Orchestrator.request_dispatch(orchestrator_name, "512")
+  end
 end

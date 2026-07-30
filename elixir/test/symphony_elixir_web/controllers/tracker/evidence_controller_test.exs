@@ -71,11 +71,11 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceControllerTest do
              }
            } = json_response(conn, 201)
 
-    assert session_id == to_string(thread.id)
+    assert session_id == "assistant-thread:#{thread.id}"
     assert identifier == issue.identifier
 
     assert {:ok, [record]} = Store.list("gam", issue.identifier)
-    assert record.session_id == to_string(thread.id)
+    assert record.session_id == "assistant-thread:#{thread.id}"
     assert File.read!(Path.join(record.artifact_dir, "artifacts/s.png")) == "imgbytes"
   end
 

@@ -28,7 +28,9 @@ describe("WorkingIndicator", () => {
   });
 
   it("shows the active tool name when a tool is running", () => {
-    render(<WorkingIndicator startedAt={Date.now()} activeTool="update_issue" />);
+    render(
+      <WorkingIndicator startedAt={Date.now()} activeTool="update_issue" />,
+    );
     expect(screen.getByText(/Running update_issue/)).toBeInTheDocument();
   });
 
@@ -38,7 +40,11 @@ describe("WorkingIndicator", () => {
     render(
       <WorkingIndicator
         startedAt={Date.now()}
-        activeToolDetail={{ name: "Bash", argumentsSummary: "pest --parallel --shard=3/3", id: "t1" }}
+        activeToolDetail={{
+          name: "Bash",
+          argumentsSummary: "pest --parallel --shard=3/3",
+          id: "t1",
+        }}
         onStop={onStop}
         onKill={onKill}
       />,
@@ -54,12 +60,26 @@ describe("WorkingIndicator", () => {
     render(
       <WorkingIndicator
         startedAt={Date.now()}
-        activeToolDetail={{ name: "Bash", argumentsSummary: "sleep 1", id: "t1" }}
+        activeToolDetail={{
+          name: "Bash",
+          argumentsSummary: "sleep 1",
+          id: "t1",
+        }}
         stale
         onStop={vi.fn()}
       />,
     );
     expect(screen.getByText(/No updates/)).toBeInTheDocument();
+  });
+
+  it("does not advertise Stop or Kill when actions live elsewhere", () => {
+    render(
+      <WorkingIndicator startedAt={Date.now()} activeToolDetail={null} stale />,
+    );
+
+    expect(screen.getByText("No updates")).toBeInTheDocument();
+    expect(screen.queryByText(/Stop or Kill/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("exposes a polite live region for assistive tech", () => {

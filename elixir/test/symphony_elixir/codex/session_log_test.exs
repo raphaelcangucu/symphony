@@ -34,6 +34,33 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
     assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call_output","output":"ok\\nline"}}))["kind"] == "tool_result"
   end
 
+  test "parse_line collapses Symphony-injected plan gates as system activity" do
+    line =
+      Jason.encode!(%{
+        "type" => "response_item",
+        "payload" => %{
+          "type" => "message",
+          "role" => "user",
+          "content" => [
+            %{
+              "type" => "input_text",
+              "text" => "## Plan gate failed (Symphony)\n\nThe issue is missing a valid workpad."
+            }
+          ]
+        }
+      })
+
+    assert SessionLog.parse_line(line) == %{
+             "kind" => "system",
+             "title" => "Plan gate failed",
+             "body" => "The issue is missing a valid workpad.",
+             "language" => "text",
+             "status" => nil,
+             "collapsed" => true,
+             "call_id" => nil
+           }
+  end
+
   test "parse_line threads call_id through tool entries for pairing" do
     call =
       SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}","call_id":"call_1"}}))

@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { executeProcess } from "./process.mjs";
@@ -272,6 +273,56 @@ export async function inspectWorkspace(workspacePath) {
   };
 }
 
+export async function inspectBrandAssets(workspacePath, brandManifest) {
+  const assets = brandManifest?.assets;
+  if (!assets || typeof assets !== "object" || Array.isArray(assets)) {
+    return {
+      passed: false,
+      missing: ["brand manifest"],
+      mismatched: [],
+      assets: assets ?? {},
+    };
+  }
+
+  const missing = [];
+  const mismatched = [];
+  for (const [relativeName, expectedHash] of Object.entries(assets)) {
+    const normalizedName = normalize(relativeName);
+    if (
+      isAbsolute(relativeName) ||
+      normalizedName === ".." ||
+      normalizedName.startsWith(`..${sep}`)
+    ) {
+      mismatched.push(relativeName);
+      continue;
+    }
+    const assetPath = join(
+      workspacePath,
+      "public",
+      "dev10x",
+      normalizedName,
+    );
+    let content;
+    try {
+      content = await readFile(assetPath);
+    } catch {
+      missing.push(relativeName);
+      continue;
+    }
+    const observedHash = createHash("sha256").update(content).digest("hex");
+    if (observedHash !== expectedHash) mismatched.push(relativeName);
+  }
+
+  missing.sort();
+  mismatched.sort();
+  return {
+    passed: missing.length === 0 && mismatched.length === 0,
+    missing,
+    mismatched,
+    assets,
+  };
+}
+
 function contractPassed(contract) {
   return (
     contract.package_json &&
@@ -279,6 +330,22 @@ function contractPassed(contract) {
     contract.playwright_config &&
     contract.e2e_tests &&
     Object.values(contract.scripts).every(Boolean)
+  );
+}
+
+export function comparisonHasFailures(comparison) {
+  const rows = comparison?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) return true;
+
+  return rows.some(
+    (row) =>
+      row.status !== "completed" ||
+      row.contract_passed !== true ||
+      row.brand?.passed !== true ||
+      row.identity?.provider_matches !== true ||
+      !Array.isArray(row.validation) ||
+      row.validation.length === 0 ||
+      row.validation.some((step) => step.status !== "passed"),
   );
 }
 
@@ -329,8 +396,8 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
     "",
     `Prompt SHA-256: \`${promptHash}\``,
     "",
-    "| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Execução | Contrato | Validação | Duração observada | Observação |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
+    "| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Execução | Contrato | Marca | Validação | Duração observada | Observação |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
   ];
 
   for (const row of rows) {
@@ -351,8 +418,18 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
       : row.error
         ? String(row.error).split("\n")[0]
         : "—";
+    const brand = row.brand?.passed
+      ? "passed"
+      : [
+          ...(row.brand?.missing?.length
+            ? [`missing: ${row.brand.missing.join(", ")}`]
+            : []),
+          ...(row.brand?.mismatched?.length
+            ? [`mismatched: ${row.brand.mismatched.join(", ")}`]
+            : []),
+        ].join("; ") || "failed";
     lines.push(
-      `| ${row.id} | ${row.matrix ?? "n/a"} | ${row.path} | ${row.provider} | ${modelEffort(row.requested_model, row.requested_effort)} | ${modelEffort(row.identity?.resolved_model, row.identity?.resolved_effort)} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${validation} | ${formatDuration(row.execution_observed_duration_ms ?? row.duration_ms)} | ${observation} |`,
+      `| ${row.id} | ${row.matrix ?? "n/a"} | ${row.path} | ${row.provider} | ${modelEffort(row.requested_model, row.requested_effort)} | ${modelEffort(row.identity?.resolved_model, row.identity?.resolved_effort)} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${brand} | ${validation} | ${formatDuration(row.execution_observed_duration_ms ?? row.duration_ms)} | ${observation} |`,
     );
   }
 
@@ -441,8 +518,19 @@ export async function collect(env = process.env) {
       runResult.attempt_id ?? null,
     );
 
+    const brand = facts.exists
+      ? await inspectBrandAssets(workspacePath, manifest.brand)
+      : {
+          passed: false,
+          missing: ["workspace"],
+          mismatched: [],
+          assets: manifest.brand?.assets ?? {},
+        };
+    const contractIsValid = facts.exists &&
+      contractPassed(facts.contract) &&
+      brand.passed;
     const validation =
-      facts.exists && contractPassed(facts.contract)
+      contractIsValid
         ? await validateWorkspace(workspacePath, index)
         : [];
     const git = facts.exists
@@ -473,7 +561,8 @@ export async function collect(env = process.env) {
       identity: resolveRunIdentity(run, runResult),
       file_count: facts.file_count,
       contract: facts.contract,
-      contract_passed: contractPassed(facts.contract),
+      brand,
+      contract_passed: contractIsValid,
       validation,
       git,
       artifacts,
@@ -524,6 +613,9 @@ if (invokedPath === import.meta.url) {
           2,
         )}\n`,
       );
+      if (comparisonHasFailures(comparison)) {
+        process.exitCode = 1;
+      }
     })
     .catch((error) => {
       process.stderr.write(`${error.stack ?? error.message}\n`);

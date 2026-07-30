@@ -25,6 +25,12 @@ defmodule SymphonyElixir.AgentModelTest do
     assert AgentModel.validate("codex", "gpt-5.5") == :ok
   end
 
+  test "accepts the curated Codex fallback when live discovery is unavailable" do
+    Application.delete_env(:symphony_elixir, :assistant_codex_catalog)
+
+    assert AgentModel.validate("codex", "gpt-5.6-sol") == :ok
+  end
+
   test "accepts a blank or nil model (CLI default)" do
     assert AgentModel.validate("codex", nil) == :ok
     assert AgentModel.validate("codex", "") == :ok
@@ -32,8 +38,8 @@ defmodule SymphonyElixir.AgentModelTest do
   end
 
   test "rejects an unknown codex model and reports the valid models" do
-    assert {:error, %{agent_kind: "codex", model: "gpt-5.6-terra", valid_models: valid}} =
-             AgentModel.validate("codex", "gpt-5.6-terra")
+    assert {:error, %{agent_kind: "codex", model: "gpt-5.2-codex", valid_models: valid}} =
+             AgentModel.validate("codex", "gpt-5.2-codex")
 
     assert "gpt-5.5" in valid
     assert "gpt-5-codex" in valid

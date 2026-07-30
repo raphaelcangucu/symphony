@@ -101,6 +101,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec subtasks(Conn.t(), map()) :: Conn.t()
+  def subtasks(conn, %{"project_slug" => project_slug, "identifier" => parent_identifier}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, identifiers} <- Context.list_subtask_children(project_slug, parent_identifier),
+         {:ok, issues} <- load_subtasks(project, identifiers) do
+      json(conn, %{data: Enum.map(issues, &present_issue(project, &1))})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec set_parent(Conn.t(), map()) :: Conn.t()
   def set_parent(conn, %{
         "project_slug" => project_slug,
@@ -168,6 +179,19 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
       _ ->
         issue
+    end
+  end
+
+  defp load_subtasks(project, identifiers) do
+    Enum.reduce_while(identifiers, {:ok, []}, fn identifier, {:ok, issues} ->
+      case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+        {:ok, issue} -> {:cont, {:ok, [issue | issues]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, issues} -> {:ok, Enum.reverse(issues)}
+      error -> error
     end
   end
 

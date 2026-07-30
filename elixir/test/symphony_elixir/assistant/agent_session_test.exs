@@ -778,23 +778,69 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
         History.create_issue_session_thread("macro", "MAC-1", %{
           title: "Build pass",
           execution_mode: "yolo",
-          workspace_path: thread_workspace
+          workspace_path: thread_workspace,
+          agent_kind: "claude",
+          model: "claude-opus-5",
+          effort: "high"
         })
 
       assert session_thread.scope == "issue_session"
 
       test_pid = self()
 
-      runner = fn workspace, _prompt, _issue, _opts ->
-        send(test_pid, {:session_workspace, workspace})
+      runner = fn workspace, _prompt, _issue, opts ->
+        send(test_pid, {:session_workspace, workspace, opts})
         {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, result} =
-               AgentSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(session_thread, "oi", %{},
+                 runner: runner,
+                 model: nil,
+                 effort: nil
+               )
 
       assert result.assistant_message == "ack"
-      assert_receive {:session_workspace, ^thread_workspace}
+      assert_receive {:session_workspace, ^thread_workspace, opts}
+      assert opts[:model] == "claude-opus-5"
+      assert opts[:effort] == "high"
+    end
+
+    test "keeps a session's selected model when the first mobile message has null preferences" do
+      thread_workspace = Workspace.path_for_issue("MAC-1")
+      File.mkdir_p!(thread_workspace)
+
+      {:ok, session_thread} =
+        History.create_issue_session_thread("macro", "MAC-1", %{
+          title: "Pinned mobile session",
+          workspace_path: thread_workspace,
+          agent_kind: "codex",
+          model: "gpt-5.6-terra",
+          effort: "high"
+        })
+
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        send(test_pid, {:pinned_mobile_session_opts, opts})
+        {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 session_thread,
+                 "start",
+                 %{"model" => nil, "effort" => nil},
+                 runner: runner
+               )
+
+      assert_receive {:pinned_mobile_session_opts, opts}
+      assert opts[:model] == "gpt-5.6-terra"
+      assert opts[:effort] == "high"
+
+      persisted = Repo.get!(Thread, session_thread.id)
+      assert persisted.requested_model == "gpt-5.6-terra"
+      assert persisted.requested_effort == "high"
     end
 
     test "revalidates an explicit issue session before every runner invocation", %{

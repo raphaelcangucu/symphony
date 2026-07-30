@@ -115,11 +115,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     with {:ok, _preferred} <- IssueCreateRepo.resolve(project, attrs) do
       case IssueCreateRepo.candidates(project, attrs) do
         [] ->
-          {:error,
-           map_error(
-             {:invalid_repository,
-              "repository is required — pass repository on create_issue or set tracker.config.repo"}
-           )}
+          {:error, map_error({:invalid_repository, "repository is required — pass repository on create_issue or set tracker.config.repo"})}
 
         repos ->
           create_issue_across_repos(project, attrs, repos)

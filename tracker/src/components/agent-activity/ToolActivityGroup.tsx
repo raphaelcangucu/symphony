@@ -9,9 +9,14 @@ import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
+import type { ToolActivityTimings } from "@/components/assistant/toolActivityTiming";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
-import { summarizeGroup, type ToolCallGroup, type ToolGroupSummary } from "@/lib/toolCallGroups";
+import {
+  summarizeGroup,
+  type ToolCallGroup,
+  type ToolGroupSummary,
+} from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
 
@@ -20,7 +25,10 @@ function groupLabel(
   summary: ToolGroupSummary,
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
-  if (group.kind === "edit" && (summary.additions > 0 || summary.deletions > 0)) {
+  if (
+    group.kind === "edit" &&
+    (summary.additions > 0 || summary.deletions > 0)
+  ) {
     return t("assistant.toolGroup.editStats", {
       n: summary.count,
       additions: summary.additions,
@@ -37,6 +45,7 @@ interface ToolActivityGroupProps extends ActivityDisclosureStateProps {
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
   onOpenKbPath?: OpenKbPathHandler;
   callKeys?: readonly string[];
+  toolTimings?: ToolActivityTimings;
 }
 
 export function ToolActivityGroup({
@@ -46,6 +55,7 @@ export function ToolActivityGroup({
   onLoadFullOutput,
   onOpenKbPath,
   callKeys,
+  toolTimings = {},
   expanded,
   onExpandedChange,
 }: ToolActivityGroupProps) {
@@ -102,6 +112,7 @@ export function ToolActivityGroup({
                 onKillTool={onKillTool}
                 onLoadFullOutput={onLoadFullOutput}
                 onOpenKbPath={onOpenKbPath}
+                timing={call.id ? toolTimings[call.id] : undefined}
               />
             );
           })}
@@ -128,6 +139,12 @@ function resolveRowKeys(
     if (stableId) return JSON.stringify(["tool-call", "id", stableId]);
     const occurrence = idlessOccurrencesByName.get(call.name) ?? 0;
     idlessOccurrencesByName.set(call.name, occurrence + 1);
-    return JSON.stringify(["tool-call", "name", call.name, "occurrence", occurrence]);
+    return JSON.stringify([
+      "tool-call",
+      "name",
+      call.name,
+      "occurrence",
+      occurrence,
+    ]);
   });
 }

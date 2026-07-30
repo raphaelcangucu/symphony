@@ -67,6 +67,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              json_response(conn, 201)
   end
 
+  test "POST reuses a thread when the idempotency key is retried" do
+    request =
+      authorize()
+      |> put_req_header("idempotency-key", "mobile-create-42")
+
+    first = post(request, "/api/tracker/v1/assistant/threads", %{scope: "freeform"})
+
+    second =
+      authorize()
+      |> put_req_header("idempotency-key", "mobile-create-42")
+      |> post("/api/tracker/v1/assistant/threads", %{scope: "freeform"})
+
+    assert %{"data" => %{"id" => id}} = json_response(first, 201)
+    assert %{"data" => %{"id" => ^id}} = json_response(second, 200)
+    assert Repo.aggregate(Thread, :count) == 1
+  end
+
   test "POST freeform thread keeps Cursor effort only in the canonical model slug" do
     conn =
       authorize()
@@ -302,6 +319,54 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
     assert {:ok, reloaded} = History.get_thread(thread.id)
     assert reloaded.agent_kind == "codex"
+  end
+
+  test "PATCH persists permission_level in thread metadata" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Permission",
+        workspace_path: System.tmp_dir!(),
+        agent_kind: "codex"
+      })
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{
+        permission_level: "full_access"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "permission_level" => "full_access"
+             }
+           } = json_response(conn, 200)
+
+    assert id == thread.id
+    assert {:ok, persisted} = History.get_thread(thread.id)
+    assert History.thread_permission_level(persisted) == "full_access"
+  end
+
+  test "PATCH rejects an invalid permission_level" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Permission",
+        workspace_path: System.tmp_dir!(),
+        agent_kind: "codex"
+      })
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{
+        permission_level: "unsafe"
+      })
+
+    assert %{"error" => %{"code" => "validation_failed", "message" => message}} =
+             json_response(conn, 422)
+
+    assert message =~ "permission_level"
+    assert {:ok, persisted} = History.get_thread(thread.id)
+    assert History.thread_permission_level(persisted) == nil
   end
 
   test "GET with include_archived=true includes archived threads" do
@@ -869,6 +934,34 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"data" => rows} = json_response(conn, 200)
     assert length(rows) == 2
     assert Enum.all?(rows, &(&1["scope"] == "issue_session"))
+  end
+
+  test "POST persists requested model provenance on an issue session" do
+    {:ok, _project} = Context.ensure_project(%{name: "Dev10x Mobile", slug: "dev10x-mobile"})
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "dev10x-mobile",
+        issue_identifier: "DEV-2",
+        agent_kind: "claude",
+        model: "claude-opus-5",
+        effort: "high",
+        execution_mode: "yolo"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "requested_model" => "claude-opus-5",
+               "requested_effort" => "high"
+             }
+           } = json_response(conn, 201)
+
+    assert {:ok, persisted} = History.get_thread(id)
+    assert persisted.requested_model == "claude-opus-5"
+    assert persisted.requested_effort == "high"
   end
 
   defp authorize do

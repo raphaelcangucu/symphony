@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "scope": "mobile",
+  "transport": "direct encrypted WebSocket RPC",
+  "operations": [
+    {
+      "operation": "host identity, health, capabilities, heartbeat and usage",
+      "rpc": ["system.identity", "system.health", "system.capabilities", "system.heartbeat", "system.usage"],
+      "legacy": ["GET /health", "GET /api/tracker/v1/viewer", "GET /api/tracker/v1/settings/agents/*"],
+      "stream": false,
+      "migration": "native_rpc"
+    },
+    {
+      "operation": "Dev10x workspace host status, settings, preflight, usage and accounts",
+      "rpc": [
+        "status.get",
+        "settings.get",
+        "settings.update",
+        "preflight.check",
+        "preflight.detectAgents",
+        "preflight.detectRemoteAgents",
+        "stats.summary",
+        "accounts.list",
+        "accounts.subscribe"
+      ],
+      "legacy": [],
+      "stream": true,
+      "migration": "orca_compatible_native_rpc"
+    },
+    {
+      "operation": "Dev10x workspace repositories, UI state and workspaces",
+      "rpc": [
+        "repo.list",
+        "repo.hooks",
+        "repo.searchRefs",
+        "repo.baseRefDefault",
+        "repo.sparsePresets",
+        "repo.saveSparsePreset",
+        "ui.get",
+        "ui.set",
+        "worktree.ps",
+        "worktree.show",
+        "worktree.create",
+        "worktree.activate",
+        "worktree.set",
+        "worktree.sleep",
+        "worktree.rm"
+      ],
+      "legacy": [
+        "GET /api/tracker/v1/projects",
+        "GET|POST /api/tracker/v1/assistant/threads"
+      ],
+      "stream": false,
+      "migration": "orca_compatible_service_adapter"
+    },
+    {
+      "operation": "paired device list, individual revocation and self-revocation",
+      "rpc": ["devices.list", "devices.revoke", "devices.self_revoke"],
+      "legacy": [],
+      "stream": false,
+      "migration": "native_rpc"
+    },
+    {
+      "operation": "projects",
+      "rpc": ["projects.request"],
+      "legacy": ["GET /api/tracker/v1/projects"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "tasks, blockers, subtasks, comments, dispatch and goal control",
+      "rpc": ["tasks.request"],
+      "legacy": ["GET|POST|PATCH /api/tracker/v1/projects/:project/issues/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "session library, creation and configuration",
+      "rpc": ["sessions.request"],
+      "legacy": ["GET|POST /api/tracker/v1/assistant/threads", "GET /api/tracker/v1/projects/:project/sessions"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "session history, messages, agent deltas, approvals, questions, interrupt and resume",
+      "rpc": ["sessions.subscribe", "sessions.command"],
+      "legacy": ["Phoenix assistant:thread:*"],
+      "stream": true,
+      "migration": "shared_channel_state_machine"
+    },
+    {
+      "operation": "Dev10x workspace session tabs, Markdown and terminal control",
+      "rpc": [
+        "session.tabs.list",
+        "session.tabs.subscribe",
+        "session.tabs.activate",
+        "session.tabs.createTerminal",
+        "session.tabs.close",
+        "terminal.list",
+        "terminal.subscribe",
+        "terminal.send",
+        "terminal.updateViewport",
+        "terminal.focus",
+        "terminal.rename",
+        "terminal.close",
+        "terminal.clearBuffer",
+        "terminal.setDisplayMode",
+        "terminal.getAutoRestoreFit",
+        "terminal.setAutoRestoreFit",
+        "markdown.readTab",
+        "markdown.saveTab"
+      ],
+      "legacy": [
+        "Phoenix terminal:thread:*",
+        "Phoenix terminal:tab:*",
+        "GET /api/tracker/v1/assistant/threads/:id/documents/*"
+      ],
+      "stream": true,
+      "migration": "orca_compatible_shared_service_adapter"
+    },
+    {
+      "operation": "terminal snapshot, output, input and resize",
+      "rpc": ["terminal.subscribe", "terminal.command"],
+      "legacy": ["Phoenix terminal:thread:*"],
+      "stream": true,
+      "migration": "shared_channel_state_machine"
+    },
+    {
+      "operation": "Dev10x workspace files, previews, terminal artifacts, browser input and clipboard images",
+      "rpc": [
+        "files.list",
+        "files.readDir",
+        "files.read",
+        "files.readPreview",
+        "files.open",
+        "files.openDiff",
+        "files.resolveTerminalPath",
+        "files.readTerminalArtifact",
+        "files.readTerminalArtifactPreview",
+        "files.writeTerminalArtifact",
+        "browser.screencast",
+        "browser.mouseDown",
+        "browser.mouseMove",
+        "browser.mouseUp",
+        "browser.mouseWheel",
+        "clipboard.startImageUpload",
+        "clipboard.appendImageUploadChunk",
+        "clipboard.commitImageUpload",
+        "clipboard.abortImageUpload",
+        "clipboard.saveImageAsTempFile"
+      ],
+      "legacy": [
+        "GET /api/tracker/v1/assistant/threads/:id/files/*",
+        "POST /api/tracker/v1/assistant/threads/:id/files/*",
+        "GET /api/tracker/v1/assistant/threads/:id/dev_servers/*"
+      ],
+      "stream": true,
+      "migration": "orca_compatible_sandboxed_service_adapter"
+    },
+    {
+      "operation": "workspace source, Markdown and image files",
+      "rpc": ["workspace.request"],
+      "legacy": ["GET /api/tracker/v1/assistant/threads/:id/files/*", "GET /api/tracker/v1/assistant/threads/:id/documents/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "diff, commit and push",
+      "rpc": ["git.request"],
+      "legacy": ["GET|POST /api/tracker/v1/assistant/threads/:id/diff/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "pull request status, checks, update, rerun, fix and merge",
+      "rpc": ["pull_requests.request"],
+      "legacy": ["GET|POST /api/tracker/v1/projects/:project/issues/:issue/pull_requests/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "preview lifecycle",
+      "rpc": ["previews.request"],
+      "legacy": ["GET|POST /api/tracker/v1/assistant/threads/:id/dev_servers/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    },
+    {
+      "operation": "host-owned push registration, test and deletion",
+      "rpc": ["notifications.request"],
+      "legacy": ["POST|DELETE /api/tracker/v1/mobile_push/*"],
+      "stream": false,
+      "migration": "allowlisted_host_bridge"
+    }
+  ]
+}

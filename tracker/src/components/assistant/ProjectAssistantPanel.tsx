@@ -7,12 +7,9 @@ import {
 import type { Channel } from "phoenix";
 import {
   Bot,
-  BookOpen,
   ChevronDown,
-  GitCompare,
   ListChecks,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import { i18n } from "@/i18n";
 import {
@@ -27,11 +24,14 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 
 import {
-  AssistantComposer,
   type AssistantComposerSubmit,
   type ComposerContextInsertRequest,
   type ComposerDraftSeed,
+  type ComposerInputActionRequest,
 } from "@/components/assistant/AssistantComposer";
+import { UnifiedComposer } from "@/components/assistant/UnifiedComposer";
+import { TurnNavigationRail } from "@/components/assistant/TurnNavigationRail";
+import { buildTurnNavigationItems } from "@/components/assistant/turnNavigation";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import {
   AssistantMessageList,
@@ -52,7 +52,6 @@ import {
   CHAT_READING_COLUMN_WIDE_CLASS,
 } from "@/components/assistant/chatTypography";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
-import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
 import {
   queuedMessagesStorageKey,
   readQueuedMessages,
@@ -63,6 +62,11 @@ import { type ComposerContextChipRef } from "@/components/assistant/contextMenti
 import { useComposerMentions } from "@/hooks/useComposerMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { defaultSkillCommands } from "@/components/assistant/slashCommands";
+import {
+  composerCapabilitiesFor,
+  executionModeForPermission,
+  permissionLevelForMode,
+} from "@/lib/composerCapabilities";
 import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
@@ -76,8 +80,13 @@ import {
   type AssistantDeltaBuffer,
 } from "@/components/assistant/assistantDeltaBuffer";
 import type { WorkingActiveToolDetail } from "@/components/assistant/WorkingIndicator";
+import {
+  reconcileToolActivityTimings,
+  type ToolActivityTimings,
+} from "@/components/assistant/toolActivityTiming";
 import { useNowTick } from "@/hooks/useNowTick";
 import { useStableValue } from "@/hooks/useStableValue";
+import { parseTimestamp } from "@/lib/timeFormat";
 import { toast } from "sonner";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import {
@@ -122,11 +131,6 @@ import {
 } from "@/components/assistant/assistantPanelHelpers";
 import { AssistantKbDocumentLinksProvider } from "@/components/assistant/assistantKbDocumentLinksContext";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
-import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
-import {
-  SkillProfileMenu,
-  resolvedSkillProfileForUi,
-} from "@/components/assistant/SkillProfileMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
@@ -164,9 +168,12 @@ import {
   type AssistantChatMessage,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import {
+  getAssistantThread,
+  updateAssistantThread,
+} from "@/services/assistantThreads";
 import { isCanceledError } from "@/services/http";
 import { getIssueRepoTree, getRepoTree } from "@/services/knowledgeBase";
-import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import {
   provisionThreadWorkspace,
   provisionWorkspace,
@@ -398,13 +405,16 @@ function activeToolDetailFromMessages(
         : running.arguments
           ? JSON.stringify(running.arguments)
           : null;
+    const id =
+      typeof running.id === "string" && running.id.trim() !== ""
+        ? running.id
+        : running.name;
+    const snapshot = turn?.activeTools.find((tool) => tool.id === id);
     return {
-      id:
-        typeof running.id === "string" && running.id.trim() !== ""
-          ? running.id
-          : running.name,
+      id,
       name: running.name,
       argumentsSummary: summary,
+      startedAt: parseTimestamp(snapshot?.startedAt),
     };
   }
 
@@ -414,6 +424,7 @@ function activeToolDetailFromMessages(
     id: snapshot.id,
     name: snapshot.name,
     argumentsSummary: snapshot.argumentsSummary,
+    startedAt: parseTimestamp(snapshot.startedAt),
   };
 }
 
@@ -605,6 +616,7 @@ function InteractiveProjectAssistantPanel({
   const [queued, setQueued] = useState<QueuedMessage[]>(() =>
     readQueuedMessages(queueStorageKey),
   );
+  const [queueingEnabled, setQueueingEnabled] = useState(true);
   const hydratedQueueKeyRef = useRef(queueStorageKey);
   const [composerDraftSeed, setComposerDraftSeed] =
     useState<ComposerDraftSeed | null>(null);
@@ -618,6 +630,7 @@ function InteractiveProjectAssistantPanel({
   const [messages, setMessages] = useState<AssistantChatMessage[]>(
     () => readThreadCache(threadId)?.messages ?? [],
   );
+  const [toolTimings, setToolTimings] = useState<ToolActivityTimings>({});
   const messagesRef = useRef<AssistantChatMessage[]>([]);
   // Coalesces streaming deltas to one render per frame so a fast turn cannot
   // flood the main thread and freeze navigation/composer. Any non-delta event
@@ -725,6 +738,9 @@ function InteractiveProjectAssistantPanel({
   const contextInsertRequestIdRef = useRef(0);
   const [contextInsertRequest, setContextInsertRequest] =
     useState<ComposerContextInsertRequest | null>(null);
+  const composerInputActionRequestIdRef = useRef(0);
+  const [composerInputActionRequest, setComposerInputActionRequest] =
+    useState<ComposerInputActionRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [kbFocusPath, setKbFocusPath] = useState<string | null>(null);
@@ -864,6 +880,21 @@ function InteractiveProjectAssistantPanel({
     }),
   );
   const executionModeRef = useRef<ExecutionMode>(executionMode);
+  useEffect(() => {
+    if (threadId == null) return;
+    let cancelled = false;
+    void getAssistantThread(threadId)
+      .then((thread) => {
+        if (cancelled || thread.permissionLevel == null) return;
+        const nextMode = executionModeForPermission(thread.permissionLevel);
+        setExecutionMode(nextMode);
+        executionModeRef.current = nextMode;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId]);
   const [skillProfileSelection, setSkillProfileSelection] =
     useState<SkillProfileId>("auto");
   const skillProfileSelectionRef = useRef<SkillProfileId>("auto");
@@ -1038,6 +1069,7 @@ function InteractiveProjectAssistantPanel({
     stickToBottomRef.current = true;
     pinnedScrollTopRef.current = null;
     setIsAtBottom(true);
+    setToolTimings({});
   }, [issueIdentifier, threadId]);
 
   useEffect(() => {
@@ -1573,40 +1605,6 @@ function InteractiveProjectAssistantPanel({
     },
     [channelReady, turnRunning],
   );
-
-  const runAutonomously = useCallback(() => {
-    if (!issueIdentifier) return;
-
-    const channel = channelRef.current;
-    if (!channel) {
-      setConnectionError(t("assistant.panel.channelNotConnected"));
-      return;
-    }
-
-    setConnectionError(null);
-    const agent = composerAgentRef.current;
-    const agentName = agentDisplayName(agent);
-    const pushResult = dispatchCodingAgent(channel, {
-      goalMode: issueGoalMode === true,
-      agent,
-      mode:
-        executionModeRef.current === "plan" ? "yolo" : executionModeRef.current,
-    });
-    pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(
-        messageFromResponse(response) ??
-          t("assistant.panel.dispatchedTo", { agent: agentName }),
-      );
-    });
-    pushResult.receive("error", (reason) => {
-      onDispatchError?.(errorMessage(reason));
-    });
-    pushResult.receive("timeout", () => {
-      onDispatchError?.(
-        t("assistant.panel.dispatchTimeout", { agent: agentName }),
-      );
-    });
-  }, [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t]);
 
   const dispatchApprovedPlan = useCallback(
     (messageId: string, mode: PlanApprovalMode) => {
@@ -2406,6 +2404,18 @@ function InteractiveProjectAssistantPanel({
   );
 
   const activeToolDetail = activeToolDetailFromMessages(messages, lastTurn);
+  useEffect(() => {
+    setToolTimings((current) =>
+      reconcileToolActivityTimings(current, {
+        activeTools: (lastTurn?.activeTools ?? []).map((tool) => ({
+          id: tool.id,
+          startedAt: parseTimestamp(tool.startedAt),
+        })),
+        messages,
+        nowMs: Date.now(),
+      }),
+    );
+  }, [lastTurn, messages]);
   const nowMs = useNowTick(1000, { enabled: turnRunning });
   const stale =
     turnRunning &&
@@ -2517,40 +2527,48 @@ function InteractiveProjectAssistantPanel({
     setDiffFocusPathRequestId((current) => current + 1);
   }, []);
 
+  const turnNavigationItems = buildTurnNavigationItems(renderedMessages);
   const messageItems = (
-    <AssistantSessionErrorBoundary
-      title={t("assistant.panel.renderErrorTitle")}
-      description={t("assistant.panel.renderErrorDescription")}
-      retryLabel={t("assistant.panel.renderErrorRetry")}
-      onReset={() => {
-        const channel = channelRef.current;
-        if (channel) requestHistorySync(channel);
-      }}
-    >
-      <AssistantMessageList
-        messages={renderedMessages}
-        loadOlder={loadOlderControl}
-        taskSnapshot={taskSnapshot}
-        hidePinnedPanel={showTasksDock}
-        projectSlug={projectSlug}
-        issueIdentifier={issueIdentifier}
-        threadId={threadId}
-        isRunning={turnRunning}
-        runningStartedAt={runningStartedAt}
-        activeToolDetail={activeToolDetail}
-        stale={stale}
-        connectionError={workspaceProvisioningError ? null : connectionError}
-        channelReady={channelReady}
-        planApprovalMessageId={planApprovalMessageId}
-        onOpenDocumentPath={handleOpenDocumentPath}
-        onInsertContext={insertContextRef}
-        onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
-        onApprovePlan={dispatchApprovedPlan}
-        onStop={handleStopTurn}
-        onKillTool={handleKillTool}
-        onFetchToolOutput={handleFetchToolOutput}
-      />
-    </AssistantSessionErrorBoundary>
+    <div className="flex min-w-0 items-start gap-1">
+      <TurnNavigationRail items={turnNavigationItems} />
+      <AssistantSessionErrorBoundary
+        title={t("assistant.panel.renderErrorTitle")}
+        description={t("assistant.panel.renderErrorDescription")}
+        retryLabel={t("assistant.panel.renderErrorRetry")}
+        onReset={() => {
+          const channel = channelRef.current;
+          if (channel) requestHistorySync(channel);
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <AssistantMessageList
+            messages={renderedMessages}
+            loadOlder={loadOlderControl}
+            taskSnapshot={taskSnapshot}
+            hidePinnedPanel={showTasksDock}
+            projectSlug={projectSlug}
+            issueIdentifier={issueIdentifier}
+            threadId={threadId}
+            isRunning={turnRunning}
+            runningStartedAt={runningStartedAt}
+            activeToolDetail={activeToolDetail}
+            toolTimings={toolTimings}
+            stale={stale}
+            connectionError={
+              workspaceProvisioningError ? null : connectionError
+            }
+            channelReady={channelReady}
+            planApprovalMessageId={planApprovalMessageId}
+            onOpenDocumentPath={handleOpenDocumentPath}
+            onInsertContext={insertContextRef}
+            onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
+            onApprovePlan={dispatchApprovedPlan}
+            onKillTool={handleKillTool}
+            onFetchToolOutput={handleFetchToolOutput}
+          />
+        </div>
+      </AssistantSessionErrorBoundary>
+    </div>
   );
 
   const removeQueued = useCallback(
@@ -2578,18 +2596,22 @@ function InteractiveProjectAssistantPanel({
     [queued],
   );
 
-  const queuedChips =
-    queued.length > 0 ? (
-      <QueuedMessageChips
-        items={queued.map((item) => ({
-          id: item.id,
-          message: item.payload.message.trim(),
-        }))}
-        onSendNow={forceSendQueued}
-        onEdit={editQueued}
-        onRemove={removeQueued}
-      />
-    ) : null;
+  const composerCapabilities = composerCapabilitiesFor(composerAgent);
+  const queuedGuidance = {
+    items: queued.map((item) => ({
+      id: item.id,
+      message: item.payload.message.trim(),
+      error: null,
+    })),
+    canSteer: composerCapabilities.steer,
+    queueingEnabled,
+    onPromote: forceSendQueued,
+    onResend: forceSendQueued,
+    onEdit: editQueued,
+    onRemove: removeQueued,
+    onOpenSideChat: () => undefined,
+    onQueueingEnabledChange: setQueueingEnabled,
+  };
 
   const submitQuestions = useCallback(
     (requestId: string | number, answers: Record<string, string>) => {
@@ -2638,6 +2660,13 @@ function InteractiveProjectAssistantPanel({
       setExecutionMode(mode);
       executionModeRef.current = mode;
       persistTurnPreferences({ mode });
+      if (threadId != null) {
+        void updateAssistantThread(threadId, {
+          permissionLevel: permissionLevelForMode(mode),
+        }).catch(() =>
+          toast.error(t("assistant.composer.permissionSaveFailed")),
+        );
+      }
       if (mode !== "yolo") return;
       if (pendingApproval)
         submitCommandApproval(pendingApproval.requestId, "approve");
@@ -2647,16 +2676,9 @@ function InteractiveProjectAssistantPanel({
       pendingApproval,
       persistTurnPreferences,
       submitCommandApproval,
+      t,
+      threadId,
     ],
-  );
-
-  const handleSkillProfileChange = useCallback(
-    (profile: SkillProfileId) => {
-      setSkillProfileSelection(profile);
-      skillProfileSelectionRef.current = profile;
-      persistTurnPreferences({ skillProfile: profile });
-    },
-    [persistTurnPreferences],
   );
 
   const approvalNode = pendingApproval ? (
@@ -2821,13 +2843,6 @@ function InteractiveProjectAssistantPanel({
       objective={authoringGoal.objective}
       running={authoringGoal.processRunning}
       timeUsedSeconds={authoringGoal.timeUsedSeconds}
-      onStop={
-        authoringGoal.processRunning &&
-        authoringGoalControlsSupported &&
-        authoringGoal.capabilities.includes("stop")
-          ? handleStopTurn
-          : undefined
-      }
       onPause={
         authoringGoalControlsSupported &&
         authoringGoal.capabilities.includes("pause")
@@ -2877,7 +2892,7 @@ function InteractiveProjectAssistantPanel({
   }, [catalogLoading, openKnowledgeBaseShortcut, projectSlug]);
 
   const composerNode = bundle ? (
-    <AssistantComposer
+    <UnifiedComposer
       key={
         settingsSeed
           ? `${threadId ?? "new"}:${settingsSeed.agent}:${settingsSeed.model}:${settingsSeed.effort}`
@@ -2885,6 +2900,41 @@ function InteractiveProjectAssistantPanel({
       }
       projectSlug={projectSlug ?? ""}
       bundle={bundle}
+      runActive={turnRunning}
+      pending={false}
+      queueingEnabled={queueingEnabled}
+      canSteer={composerCapabilities.steer}
+      permission={permissionLevelForMode(executionMode)}
+      permissionOptions={composerCapabilities.permissions}
+      onPermissionChange={(permission) =>
+        handleExecutionModeChange(executionModeForPermission(permission))
+      }
+      actionContext={{
+        hasWorkspace: Boolean(issueIdentifier || threadId),
+        supportsGoal: composerCapabilities.nativeGoal,
+      }}
+      actionHandlers={{
+        files: () => undefined,
+        context: () => {
+          composerInputActionRequestIdRef.current += 1;
+          setComposerInputActionRequest({
+            id: composerInputActionRequestIdRef.current,
+            action: "context",
+          });
+        },
+        diff: () => setComposerDiffRequestId((current) => current + 1),
+        kb: openKnowledgeBaseShortcut,
+        magic: () => setMagicPaletteRequestId((current) => current + 1),
+        goal: () => {
+          composerInputActionRequestIdRef.current += 1;
+          setComposerInputActionRequest({
+            id: composerInputActionRequestIdRef.current,
+            action: "goal",
+          });
+        },
+        commands: () => setMagicPaletteRequestId((current) => current + 1),
+      }}
+      queue={queuedGuidance}
       agentMenuDisabled={
         authoringGoal.enabled ||
         turnRunning ||
@@ -2901,6 +2951,12 @@ function InteractiveProjectAssistantPanel({
       magicPaletteRequestId={magicPaletteRequestId}
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
+      inputActionRequest={composerInputActionRequest}
+      onInputActionConsumed={(requestId) =>
+        setComposerInputActionRequest((current) =>
+          current?.id === requestId ? null : current,
+        )
+      }
       onNotionImported={setNotionImport}
       persistLocalComposerState={threadId == null && !issueIdentifier}
       hint={
@@ -2943,117 +2999,16 @@ function InteractiveProjectAssistantPanel({
           </Button>
         ) : undefined
       }
-      toolbarBeforeAgent={
-        hasExecutableContext || isExploreMode ? (
-          <ExecutionModeMenu
-            agent={composerAgent}
-            mode={executionMode}
-            disabled={catalogLoading}
-            locked={modeLocked}
-            onChange={handleExecutionModeChange}
-          />
-        ) : null
-      }
-      toolbarMore={
-        projectSlug || issueIdentifier || threadId ? (
-          <>
-            {issueIdentifier || threadId ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                title={t("issue.diff.shortcutHint")}
-                onClick={() =>
-                  setComposerDiffRequestId((current) => current + 1)
-                }
-              >
-                <GitCompare className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("issue.diff.button")}
-                </span>
-              </Button>
-            ) : null}
-            {hideHeader ? (
-              <WorkspaceDiffStatsChip stats={workspaceDiffStats} />
-            ) : null}
-            {projectSlug ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="relative h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                aria-label={t("layout.projectHeader.knowledgeBase")}
-                title={t("assistant.panel.openKnowledgeBaseShortcut")}
-                onClick={() => openKnowledgeBase()}
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("assistant.panel.openKnowledgeBase")}
-                </span>
-                {changedDocs.count > 0 ? (
-                  <span
-                    aria-hidden
-                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
-                    data-testid="changed-docs-dot"
-                  />
-                ) : null}
-              </Button>
-            ) : null}
-            {hasExecutableContext || isExploreMode ? (
-              <SkillProfileMenu
-                selection={skillProfileSelection}
-                resolvedProfile={resolvedSkillProfileForUi({
-                  selection: skillProfileSelection,
-                  scope: threadScope,
-                  mode: executionMode,
-                })}
-                disabled={catalogLoading}
-                onChange={handleSkillProfileChange}
-              />
-            ) : null}
-            {issueIdentifier ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading || !channelReady}
-                title={t("assistant.panel.runAutonomouslyTitle")}
-                onClick={runAutonomously}
-                data-testid="run-autonomously"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("assistant.panel.runAutonomously")}
-                </span>
-              </Button>
-            ) : null}
-            {hasExecutableContext ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                title={t("commands.magic.open")}
-                onClick={() =>
-                  setMagicPaletteRequestId((current) => current + 1)
-                }
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("commands.magic.button")}
-                </span>
-              </Button>
-            ) : null}
-          </>
-        ) : undefined
-      }
       onForceQueued={forceSendOldestQueued}
-      onSubmit={sendMessage}
+      onSend={sendMessage}
+      onQueue={(submit) =>
+        setQueued((current) => [
+          ...current,
+          { id: crypto.randomUUID(), payload: submit },
+        ])
+      }
+      onSteer={steerTurn}
+      onStop={handleStopTurn}
       onAgentChange={handleComposerAgentChange}
       dropTargetRef={panelRef}
     />
@@ -3160,7 +3115,6 @@ function InteractiveProjectAssistantPanel({
                     <div className={chatReadingColumn}>
                       {!isEmbeddedMode ? resumeBanner : null}
                       {workspaceProvisionBanner}
-                      {queuedChips}
                       {questionsNode}
                       {approvalNode}
                       {createPlanNode}
@@ -3275,7 +3229,6 @@ function InteractiveProjectAssistantPanel({
                 </div>
                 {resumeBanner}
                 {workspaceProvisionBanner}
-                {queuedChips}
                 {questionsNode}
                 {approvalNode}
                 {createPlanNode}

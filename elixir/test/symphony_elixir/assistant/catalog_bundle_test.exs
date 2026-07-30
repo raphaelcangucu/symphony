@@ -3,8 +3,8 @@ defmodule SymphonyElixir.Assistant.CatalogBundleTest do
 
   alias SymphonyElixir.Assistant.CatalogBundle
 
-  test "returns an explicit provider error instead of omitting a failed catalog" do
-    assert {:error, {:assistant_catalog_unavailable, failures}} =
+  test "returns available provider catalogs while reporting an unavailable provider" do
+    assert {:ok, bundle} =
              CatalogBundle.fetch(
                fetchers: [
                  codex: fn -> {:ok, catalog("codex")} end,
@@ -12,7 +12,14 @@ defmodule SymphonyElixir.Assistant.CatalogBundleTest do
                ]
              )
 
-    assert failures == %{cursor: :cli_unavailable}
+    assert Enum.map(bundle.agents, & &1.agent) == ["codex"]
+    assert bundle.unavailable_agents == %{cursor: ":cli_unavailable"}
+    assert {:ok, _json} = Jason.encode(bundle)
+  end
+
+  test "returns an explicit error when every provider catalog is unavailable" do
+    assert {:error, {:assistant_catalog_unavailable, %{codex: :cli_unavailable}}} =
+             CatalogBundle.fetch(fetchers: [codex: fn -> {:error, :cli_unavailable} end])
   end
 
   test "returns all successful catalogs as one bundle" do

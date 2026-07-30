@@ -7,4 +7,9 @@
 # Per-developer project YAML bundles (make project-import / project-export)
 /projects/
 
+# Expo routes named "projects" are source code, not local project exports.
+!/mobile/app/h/[[]hostId[]]/projects.tsx
+!/mobile/app/h/[[]hostId[]]/projects/
+!/mobile/app/h/[[]hostId[]]/projects/**
+
 .superpowers/

@@ -18,6 +18,7 @@ defmodule SymphonyElixirWeb.PresenterTest do
         project_slug: project_slug
       },
       session_id: "thread-#{issue_id}",
+      execution_session_id: 71,
       codex_app_server_pid: nil,
       turn_count: 1,
       last_codex_message: nil,
@@ -77,7 +78,7 @@ defmodule SymphonyElixirWeb.PresenterTest do
 
     payload = Presenter.state_payload(orchestrator, 1_000)
 
-    assert [%{project_slug: "alpha"}] = payload.running
+    assert [%{project_slug: "alpha", execution_session_id: 71}] = payload.running
     assert [%{project_slug: "beta"}] = payload.retrying
   end
 

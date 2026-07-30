@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
+import type { ToolActivityTimings } from "@/components/assistant/toolActivityTiming";
 import { ToolActivityGroup } from "@/components/agent-activity/ToolActivityGroup";
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
@@ -12,6 +13,7 @@ import type { AssistantToolCall } from "@/services/assistant";
 
 interface ToolActivityTimelineProps {
   toolCalls: AssistantToolCall[];
+  toolTimings?: ToolActivityTimings;
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
@@ -31,6 +33,7 @@ interface TimelineGroup {
 
 function ToolActivityTimelineComponent({
   toolCalls,
+  toolTimings = {},
   taskSnapshot = null,
   onKillTool,
   onLoadFullOutput,
@@ -52,6 +55,7 @@ function ToolActivityTimelineComponent({
           onKillTool={onKillTool}
           onLoadFullOutput={onLoadFullOutput}
           onOpenKbPath={onOpenKbPath}
+          toolTimings={toolTimings}
         />
       ))}
     </div>
@@ -68,6 +72,7 @@ function ToolActivityEntry({
   onKillTool,
   onLoadFullOutput,
   onOpenKbPath,
+  toolTimings,
 }: {
   group: ToolCallGroup;
   callKeys: readonly string[];
@@ -75,6 +80,7 @@ function ToolActivityEntry({
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
   onOpenKbPath?: OpenKbPathHandler;
+  toolTimings: ToolActivityTimings;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -87,6 +93,7 @@ function ToolActivityEntry({
           onKillTool={onKillTool}
           onLoadFullOutput={onLoadFullOutput}
           onOpenKbPath={onOpenKbPath}
+          toolTimings={toolTimings}
           callKeys={callKeys}
           expanded={expanded}
           onExpandedChange={setExpanded}
@@ -120,6 +127,7 @@ function ToolActivityEntry({
         onKillTool={onKillTool}
         onLoadFullOutput={onLoadFullOutput}
         onOpenKbPath={onOpenKbPath}
+        timing={call.id ? toolTimings[call.id] : undefined}
         expanded={expanded}
         onExpandedChange={setExpanded}
       />
@@ -181,9 +189,7 @@ function buildTimelineGroups(
   });
 }
 
-function groupKey(
-  canonicalCalls: readonly CanonicalToolCall[],
-): string {
+function groupKey(canonicalCalls: readonly CanonicalToolCall[]): string {
   const firstCall = canonicalCalls[0];
   return firstCall?.key ?? JSON.stringify(["tool-activity", "empty"]);
 }

@@ -262,6 +262,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       target_issue_id: relation.target_issue_id,
       source_identifier: loaded_issue_identifier(relation.source_issue),
       target_identifier: loaded_issue_identifier(relation.target_issue),
+      title: loaded_issue_title(relation.target_issue),
+      status: loaded_issue_status(relation.target_issue),
       inserted_at: iso8601(relation.inserted_at)
     }
   end
@@ -319,10 +321,17 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       workspace_path: Map.get(thread, :workspace_path),
       labels: sidebar_labels(Map.get(thread, :metadata)),
       needs_review: sidebar_needs_review(Map.get(thread, :metadata)),
+      permission_level: thread_permission_level(Map.get(thread, :metadata)),
       preview: Map.get(thread, :preview),
       updated_at: iso8601(thread.updated_at)
     }
   end
+
+  defp thread_permission_level(%{"permission_level" => level})
+       when level in ~w(ask_for_approval approve_for_me full_access),
+       do: level
+
+  defp thread_permission_level(_metadata), do: nil
 
   @spec recent_item(map()) :: map()
   def recent_item(item) when is_map(item) do
@@ -404,6 +413,10 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   defp loaded_issue_identifier(%IssueRecord{} = issue), do: issue.identifier
   defp loaded_issue_identifier(_issue), do: nil
+  defp loaded_issue_title(%IssueRecord{} = issue), do: issue.title
+  defp loaded_issue_title(_issue), do: nil
+  defp loaded_issue_status(%IssueRecord{status: %WorkflowStatus{} = issue_status}), do: status(issue_status)
+  defp loaded_issue_status(_issue), do: nil
 
   defp sidebar_labels(%{"sidebar_labels" => labels}) when is_list(labels), do: labels
   defp sidebar_labels(_metadata), do: []

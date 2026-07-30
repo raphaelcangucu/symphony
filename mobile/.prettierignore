@@ -1,0 +1,21 @@
+# Production Dev10x presentation sources are kept in the upstream style so
+# mechanical comparisons remain meaningful.
+app/about.tsx
+app/browser-settings.tsx
+app/h/
+app/pair-confirm.tsx
+app/pair-scan.tsx
+app/pair.tsx
+app/settings.tsx
+app/terminal-settings.tsx
+app/troubleshoot.tsx
+app/voice-settings.tsx
+src/dev10x/
+src/renderer/
+src/shared/
+
+# Vendored native module.
+packages/expo-two-way-audio/
+
+# Provenance is hand-wrapped for readable Markdown tables and commands.
+UPSTREAM_PROVENANCE.md

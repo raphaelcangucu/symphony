@@ -150,6 +150,11 @@ export interface ComposerContextInsertRequest {
   ref: ComposerContextChipRef;
 }
 
+export interface ComposerInputActionRequest {
+  id: number;
+  action: "context" | "goal";
+}
+
 /**
  * `@`-mention wiring. When enabled, the parent supplies `mentionOptions` for
  * the current query (reported via `onMentionQueryChange`) and records
@@ -207,6 +212,8 @@ export interface ComposerSlotProps {
    * with the message box instead of a detached banner.
    */
   header?: ReactNode;
+  /** Replaces the default attachment button while retaining its file picker callback. */
+  addMenu?: (openFilePicker: () => void) => ReactNode;
   toolbarAfterAttach?: ReactNode;
   /**
    * Secondary tools collapsed into a More menu below `lg` (Diff, KB, Magic, etc.).
@@ -223,7 +230,7 @@ export interface ComposerSlotProps {
   footer?: ReactNode;
 }
 
-interface AssistantComposerProps
+export interface AssistantComposerProps
   extends
     ComposerMentionProps,
     ComposerMagicProps,
@@ -248,6 +255,10 @@ interface AssistantComposerProps
   /** Allow submit (and the default send affordance) with an empty input. */
   allowEmptySubmit?: boolean;
   contextInsertRequest?: ComposerContextInsertRequest | null;
+  /** Opens a canonical composer flow after an external action such as the Add menu. */
+  inputActionRequest?: ComposerInputActionRequest | null;
+  /** Acknowledges an external input action so it cannot replay after a remount. */
+  onInputActionConsumed?: (requestId: number) => void;
   onForceQueued?: () => void;
   /** Called when Enter is pressed with an empty input (no attachments). */
   onEmptySubmit?: () => void;
@@ -290,12 +301,15 @@ export function AssistantComposer({
   onMentionQueryChange,
   onMentionSelect,
   header,
+  addMenu,
   toolbarAfterAttach,
   toolbarMore,
   toolbarBeforeAgent,
   submitActions,
   footer,
   contextInsertRequest = null,
+  inputActionRequest = null,
+  onInputActionConsumed,
   onForceQueued,
   onEmptySubmit,
   onSubmit,
@@ -311,6 +325,7 @@ export function AssistantComposer({
   const { t } = useTranslation();
   const isLgUp = useIsLgUp();
   const [input, setInput] = useState("");
+  const mentions = useContextMentions(input);
   const [notionImporting, setNotionImporting] = useState(false);
   const [internalMagicOpen, setInternalMagicOpen] = useState(false);
   const magicOpen = magicPaletteOpen ?? internalMagicOpen;
@@ -332,6 +347,7 @@ export function AssistantComposer({
   } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const lastDraftSeedIdRef = useRef(0);
+  const lastInputActionIdRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(
     () => {
       if (settingsSeed) {
@@ -486,6 +502,33 @@ export function AssistantComposer({
   }, [draftSeed, replaceAttachments]);
 
   useEffect(() => {
+    if (
+      !inputActionRequest ||
+      inputActionRequest.id === lastInputActionIdRef.current ||
+      !Number.isFinite(inputActionRequest.id) ||
+      inputActionRequest.id <= 0
+    ) {
+      return;
+    }
+
+    lastInputActionIdRef.current = inputActionRequest.id;
+    setInput((current) => {
+      if (inputActionRequest.action === "context") {
+        if (!current) return "@";
+        return /\s$/.test(current) ? `${current}@` : `${current} @`;
+      }
+
+      if (/^\s*\/goal(?:\s|$)/.test(current)) return current;
+      const objective = current.trim();
+      return objective ? `/goal ${objective}` : "/goal ";
+    });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    });
+    onInputActionConsumed?.(inputActionRequest.id);
+  }, [inputActionRequest, onInputActionConsumed]);
+
+  useEffect(() => {
     return () => {
       stopSpeechRecognition();
     };
@@ -540,7 +583,6 @@ export function AssistantComposer({
   const showPalette =
     paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
-  const mentions = useContextMentions(input);
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [paletteActiveIndex, setPaletteActiveIndex] = useState(0);
   const paletteListRef = useRef<HTMLDivElement>(null);
@@ -553,7 +595,7 @@ export function AssistantComposer({
   useEffect(() => {
     if (magicPaletteRequestId <= 0) return;
     setMagicOpen(true);
-  }, [magicPaletteRequestId]);
+  }, [magicPaletteRequestId, setMagicOpen]);
 
   const magicCommands = allSlashCommands(
     t,
@@ -1084,8 +1126,11 @@ export function AssistantComposer({
           )}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <div
+          data-testid="assistant-composer-toolbar"
+          className="flex flex-nowrap items-center justify-between gap-1 overflow-hidden px-2 pb-3 sm:gap-2 sm:overflow-visible sm:px-3"
+        >
+          <div className="flex shrink-0 flex-nowrap items-center gap-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -1093,17 +1138,21 @@ export function AssistantComposer({
               className="hidden"
               onChange={(event) => void handleFilePick(event)}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-              disabled={disabled || composerDisabled || uploadingImage}
-              aria-label={t("assistant.composer.attachFile")}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+            {addMenu ? (
+              addMenu(() => fileInputRef.current?.click())
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={disabled || composerDisabled || uploadingImage}
+                aria-label={t("assistant.composer.attachFile")}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
             {toolbarAfterAttach}
             {toolbarMore ? (
               <ComposerMoreMenu disabled={disabled || composerDisabled}>
@@ -1112,78 +1161,85 @@ export function AssistantComposer({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            {toolbarBeforeAgent}
-            <ComposerToolbar
-              bundle={bundle}
-              catalog={catalog}
-              agent={composerState.agent}
-              settings={settings}
-              disabled={disabled}
-              composerDisabled={composerDisabled}
-              agentMenuDisabled={agentMenuDisabled}
-              compact={!isLgUp}
-              onAgentChange={updateAgent}
-              onModelChange={updateModel}
-              onEffortChange={updateEffort}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "relative h-8 w-8 overflow-visible rounded-full",
-                recording &&
-                  "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
-              )}
-              disabled={disabled || composerDisabled}
-              aria-label={
-                recording
-                  ? t("assistant.composer.stopRecording")
-                  : t("assistant.composer.recordAudio")
-              }
-              onClick={() => void toggleRecording()}
-            >
-              {recording ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)] motion-safe:animate-pulse"
-                  />
-                  <Square className="relative h-3.5 w-3.5 fill-current" />
-                </>
-              ) : (
-                <Mic
-                  className={cn("h-4 w-4", speechListening && "animate-pulse")}
-                />
-              )}
-            </Button>
-            {recording ? (
-              <span
-                className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
-                aria-live="polite"
-              >
-                <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
-                {t("assistant.composer.recording")}
-              </span>
-            ) : null}
-            {submitActions ?? (
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1">
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:overflow-visible">
+              {toolbarBeforeAgent}
+              <ComposerToolbar
+                bundle={bundle}
+                catalog={catalog}
+                agent={composerState.agent}
+                settings={settings}
+                disabled={disabled}
+                composerDisabled={composerDisabled}
+                agentMenuDisabled={agentMenuDisabled}
+                compact={!isLgUp}
+                onAgentChange={updateAgent}
+                onModelChange={updateModel}
+                onEffortChange={updateEffort}
+              />
               <Button
-                type="submit"
-                variant="default"
+                type="button"
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full"
-                disabled={!canSend}
-                aria-label={t("assistant.composer.sendMessage")}
-                title={t("assistant.composer.sendMessage")}
+                className={cn(
+                  "relative h-8 w-8 shrink-0 overflow-visible rounded-full",
+                  recording &&
+                    "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
+                )}
+                disabled={disabled || composerDisabled}
+                aria-label={
+                  recording
+                    ? t("assistant.composer.stopRecording")
+                    : t("assistant.composer.recordAudio")
+                }
+                onClick={() => void toggleRecording()}
               >
-                <Send className="h-4 w-4" />
+                {recording ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)] motion-safe:animate-pulse"
+                    />
+                    <Square className="relative h-3.5 w-3.5 fill-current" />
+                  </>
+                ) : (
+                  <Mic
+                    className={cn(
+                      "h-4 w-4",
+                      speechListening && "animate-pulse",
+                    )}
+                  />
+                )}
               </Button>
-            )}
+              {recording ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 px-1 text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
+                  {t("assistant.composer.recording")}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex shrink-0">
+              {submitActions ?? (
+                <Button
+                  type="submit"
+                  variant="default"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  disabled={!canSend}
+                  aria-label={t("assistant.composer.sendMessage")}
+                  title={t("assistant.composer.sendMessage")}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

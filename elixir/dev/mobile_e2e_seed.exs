@@ -1,0 +1,343 @@
+alias SymphonyElixir.Assistant.{History, Thread}
+alias SymphonyElixir.Agent.ExecutionSession
+alias SymphonyElixir.Agent.SessionStore
+alias SymphonyElixir.LocalTracker.Context
+alias SymphonyElixir.PromptTemplates
+alias SymphonyElixir.Repo
+alias SymphonyElixir.Tracker.Sync.LocalStore
+alias SymphonyElixir.Workspace
+
+single_cell? = System.get_env("DEV10X_SINGLE_CELL_E2E") == "1"
+
+[host_label, project_slug, requested_workspace_path] =
+  case System.argv() do
+    [host_label, project_slug, workspace_path] ->
+      [host_label, project_slug, Path.expand(workspace_path)]
+
+    _ ->
+      raise "usage: mix run dev/mobile_e2e_seed.exs HOST_LABEL PROJECT_SLUG WORKSPACE_PATH"
+  end
+
+workspace_root = requested_workspace_path <> "-root"
+workspace_path = Path.join(workspace_root, "app")
+
+File.mkdir_p!(workspace_path)
+File.write!(Path.join(workspace_path, "README.md"), "# #{host_label}\n\nDirect encrypted mobile RPC fixture.\n")
+File.mkdir_p!(Path.join(workspace_path, "docs"))
+
+File.write!(
+  Path.join(workspace_path, "docs/mobile.md"),
+  """
+  # Symphony Mobile
+
+  This workspace is controlled directly through #{host_label}.
+  """
+)
+
+unless File.dir?(Path.join(workspace_path, ".git")) do
+  {_output, 0} = System.cmd("git", ["init", "-b", "main"], cd: workspace_path, stderr_to_stdout: true)
+  {_output, 0} = System.cmd("git", ["config", "user.email", "e2e@symphony.test"], cd: workspace_path)
+  {_output, 0} = System.cmd("git", ["config", "user.name", "Symphony E2E"], cd: workspace_path)
+  {_output, 0} = System.cmd("git", ["add", "."], cd: workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["commit", "-m", "Seed direct-host mobile workspace"],
+      cd: workspace_path,
+      stderr_to_stdout: true
+    )
+
+  File.write!(
+    Path.join(workspace_path, "README.md"),
+    "\nUncommitted change visible in the mobile diff.\n",
+    [:append]
+  )
+end
+
+bare_repo_path = requested_workspace_path <> "-source.git"
+
+unless File.dir?(bare_repo_path) do
+  {_output, 0} =
+    System.cmd("git", ["clone", "--bare", workspace_path, bare_repo_path], stderr_to_stdout: true)
+end
+
+workflow_markdown = """
+---
+tracker:
+  field_states:
+    - Backlog
+    - In Progress
+    - Ready
+    - Human Review
+    - Done
+  active_states:
+    - Ready
+  dispatch_states:
+    - Ready
+  wait_states:
+    - Human Review
+  terminal_states:
+    - Done
+workspace:
+  root: #{Jason.encode!(workspace_root)}
+dev_server:
+  enabled: false
+agent:
+  kind: codex
+  max_concurrent_agents: 1
+  max_turns: 6
+  completion_transitions:
+    Ready: Human Review
+codex:
+  approval_policy: never
+  thread_sandbox: danger-full-access
+---
+{{ issue.description }}
+"""
+
+{:ok, project} =
+  Context.create_workspace_project(%{
+    name: "#{host_label} Project",
+    slug: project_slug,
+    description: "Deterministic direct-host E2E project",
+    tracker: %{kind: "local", config: %{}},
+    workflow_statuses: [
+      %{name: "Backlog", category: "backlog", position: 0, is_terminal: false},
+      %{name: "In Progress", category: "active", position: 1, is_terminal: false},
+      %{name: "Ready", category: "active", position: 2, is_terminal: false},
+      %{name: "Human Review", category: "wait", position: 3, is_terminal: false},
+      %{name: "Done", category: "terminal", position: 4, is_terminal: true}
+    ],
+    repositories: [
+      %{
+        github_full_name: "local/#{project_slug}",
+        clone_url: bare_repo_path,
+        default_branch: "main",
+        selected_branch: "main",
+        local_path: workspace_path,
+        workspace_path: "app",
+        role: "application",
+        scan_summary: %{"stack" => ["markdown"]}
+      }
+    ],
+    setup: %{
+      workflow_markdown: workflow_markdown,
+      validation_commands: [],
+      scan_summary: %{"purpose" => "mobile-real-host-e2e"}
+    }
+  })
+
+{:ok, primary} =
+  Context.create_issue(project_slug, %{
+    title: "#{host_label}: encrypted mobile control",
+    description:
+      if(single_cell?,
+        do: """
+        Validate the complete Dev10x Mobile journey against this real encrypted
+        Symphony host. Exercise the task, session, terminal, files, diff and
+        evidence surfaces. When dispatched, reply exactly `READY73`, finish the
+        initial turn, then reply exactly `STEERED73` when an operator follow-up
+        contains that marker in the same transcript.
+        """,
+        else: "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
+      ),
+    status: if(single_cell?, do: "Ready", else: "In Progress"),
+    priority: 1,
+    agent_goal: "Validate the complete Dev10x Mobile workflow",
+    branch_name: "agent/mobile-multi-host-e2e"
+  })
+
+unless single_cell? do
+  {:ok, blocker} =
+    Context.create_issue(project_slug, %{
+      title: "#{host_label}: verify host isolation",
+      description: "The same local identifiers may exist on both hosts.",
+      status: "Backlog",
+      priority: 2
+    })
+
+  {:ok, subtask} =
+    Context.create_issue(project_slug, %{
+      title: "#{host_label}: record native evidence",
+      description: "Capture the encrypted direct-host journey.",
+      status: "Backlog",
+      priority: 2
+    })
+
+  {:ok, _relation} = Context.add_blocker(project_slug, primary.identifier, blocker.identifier)
+  {:ok, _subtask} = Context.set_issue_parent(project_slug, subtask.identifier, primary.identifier)
+end
+
+{:ok, _comment} =
+  Context.add_comment(
+    project_slug,
+    primary.identifier,
+    "This task is served by #{host_label} over its own encrypted RPC connection.",
+    %{author: "Symphony E2E"}
+  )
+
+{:ok, _workpad} =
+  Context.add_comment(
+    project_slug,
+    primary.identifier,
+    """
+    ## Codex Workpad
+
+    Validate the complete native task journey without mocks.
+
+    - [x] Pair directly with the encrypted host
+    - [x] Open the task-associated execution
+    - [ ] Review the mobile task detail
+    - [ ] Validate Plan, Magic and structured context
+    """,
+    %{author: "Codex", kind: "workpad"}
+  )
+
+{:ok, _template} =
+  PromptTemplates.create(%{
+    slug: "mobile-e2e-review",
+    name: "E2E review",
+    description: "Review the task from the real mobile Magic sheet.",
+    category: "Quality",
+    body: "Review {{ issue.identifier }} and report the most important risk.",
+    agent_kind: "codex",
+    mode: "plan",
+    scope: project_slug,
+    position: -100
+  })
+
+{:ok, _pull_request} =
+  LocalStore.link_manual_pull_request(project.id, primary.identifier, %{
+    url: "https://github.com/dev10x/symphony/pull/418",
+    number: 418,
+    repo: "dev10x/symphony",
+    title: "feat(mobile): task session navigation",
+    state: "open"
+  })
+
+orchestrator_issue =
+  if single_cell? do
+    primary
+  else
+    {:ok, issue} =
+      Context.create_issue(project_slug, %{
+        title: "#{host_label}: live orchestrator steer",
+        description: """
+        Validate a real Dev10x Mobile orchestrator stream. Start by running
+        `sleep 120`, remain available for an operator steer, then follow the
+        operator's updated direction and report it clearly.
+        """,
+        status: "Backlog",
+        priority: 1,
+        agent: "codex"
+      })
+
+    issue
+  end
+
+{:ok, session_workspace_path} =
+  Workspace.create_for_issue(%{
+    id: primary.id,
+    identifier: primary.identifier,
+    project_slug: project_slug
+  })
+
+unless File.dir?(Path.join(session_workspace_path, ".git")) do
+  File.write!(Path.join(session_workspace_path, ".gitignore"), ".symphony/\napp/\n")
+  File.write!(Path.join(session_workspace_path, "README.md"), "# #{host_label} workspace\n")
+
+  {_output, 0} =
+    System.cmd("git", ["init", "-b", "main"],
+      cd: session_workspace_path,
+      stderr_to_stdout: true
+    )
+
+  {_output, 0} =
+    System.cmd("git", ["config", "user.email", "e2e@symphony.test"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["config", "user.name", "Symphony E2E"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["add", ".gitignore", "README.md"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["commit", "-m", "Seed Symphony workspace shell"],
+      cd: session_workspace_path,
+      stderr_to_stdout: true
+    )
+
+  File.write!(
+    Path.join(session_workspace_path, "README.md"),
+    "\nUncommitted workspace change visible in the mobile diff.\n",
+    [:append]
+  )
+end
+
+File.write!(
+  Path.join([session_workspace_path, "app", "README.md"]),
+  "\nUncommitted change visible in the mobile diff.\n",
+  [:append]
+)
+
+{:ok, thread} =
+  %Thread{}
+  |> Thread.changeset(%{
+    scope: "issue_session",
+    project_slug: project_slug,
+    issue_identifier: primary.identifier,
+    title: "#{host_label} — Direct RPC session",
+    workspace_path: session_workspace_path,
+    status: "active",
+    agent_kind: "codex",
+    metadata: %{"execution_mode" => "build"}
+  })
+  |> Repo.insert()
+
+{:ok, _message} =
+  History.append_message(thread, %{
+    role: "assistant",
+    content: "#{host_label} is online. Projects, tasks, sessions and tools are isolated on this machine."
+  })
+
+{:ok, execution_thread} =
+  ExecutionSession.ensure(project_slug, primary.identifier,
+    force_new: true,
+    workspace_path: session_workspace_path,
+    agent_kind: "codex",
+    requested_model: "gpt-5.6-sol",
+    requested_effort: "high",
+    title: "#{host_label} — Task execution"
+  )
+
+:ok =
+  SessionStore.append(session_workspace_path, execution_thread.id, %{
+    "kind" => "system",
+    "title" => "Execution connected",
+    "body" => "Encrypted mobile RPC stream established with #{host_label}.",
+    "language" => "text",
+    "status" => "completed",
+    "collapsed" => true
+  })
+
+:ok =
+  SessionStore.append(session_workspace_path, execution_thread.id, %{
+    "kind" => "assistant",
+    "title" => "Agent message",
+    "body" => "The native task journey is ready for review. Open the linked task to inspect its summary, pull request, comments, evidence and sessions.",
+    "language" => "markdown",
+    "status" => "completed",
+    "collapsed" => false
+  })
+
+{:ok, _execution_thread} = ExecutionSession.finish(execution_thread.id, "completed")
+
+IO.puts(
+  Jason.encode!(%{
+    host: host_label,
+    project_slug: project_slug,
+    issue_identifier: primary.identifier,
+    orchestrator_issue_identifier: orchestrator_issue.identifier,
+    thread_id: thread.id,
+    execution_session_id: execution_thread.id
+  })
+)

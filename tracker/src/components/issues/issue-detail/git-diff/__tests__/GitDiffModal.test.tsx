@@ -154,6 +154,44 @@ describe("GitDiffModal", () => {
     });
   });
 
+  it("keeps the Diff toolbar and workspace inside a mobile viewport", () => {
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+      />,
+    );
+
+    expect(screen.getByTestId("git-diff-toolbar")).toHaveClass(
+      "min-w-0",
+      "flex-col",
+      "overflow-hidden",
+      "sm:flex-row",
+    );
+    expect(screen.getByTestId("git-diff-actions")).toHaveClass(
+      "w-full",
+      "overflow-x-auto",
+      "sm:w-auto",
+    );
+    expect(screen.getByTestId("git-diff-stats")).toHaveClass(
+      "hidden",
+      "sm:inline-flex",
+    );
+    expect(screen.getByTestId("git-diff-workspace")).toHaveClass(
+      "min-w-0",
+      "grid-cols-1",
+      "md:grid-cols-[20rem_minmax(0,1fr)]",
+    );
+    expect(screen.getByTestId("git-diff-file-pane")).toHaveClass(
+      "border-b",
+      "md:border-b-0",
+      "md:border-r",
+    );
+    expect(screen.getByTestId("git-diff-viewer-pane")).toHaveClass("min-w-0");
+  });
+
   it("does not claim the workspace is unavailable when stats cleared but commit evidence has a path", async () => {
     const user = userEvent.setup();
     useGitDiffStatsMock.mockReturnValue({

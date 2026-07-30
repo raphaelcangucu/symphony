@@ -18,6 +18,7 @@ defmodule SymphonyElixir.LocalTracker.Project do
     field(:warmed_at, :utc_datetime_usec)
     field(:warm_up_status, :string, default: "never")
     field(:last_warm_up_run_id, :integer)
+    field(:last_issue_number, :integer, default: 0)
 
     has_many(:repositories, SymphonyElixir.LocalTracker.Repository)
     has_many(:statuses, WorkflowStatus)

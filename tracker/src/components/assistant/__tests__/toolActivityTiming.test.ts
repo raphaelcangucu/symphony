@@ -1,0 +1,125 @@
+import { describe, expect, it } from "vitest";
+
+import { reconcileToolActivityTimings } from "@/components/assistant/toolActivityTiming";
+import type { AssistantChatMessage } from "@/services/assistant";
+
+function message(
+  toolCallId: string,
+  status: "running" | "complete" | "error",
+): AssistantChatMessage {
+  return {
+    id: "assistant-1",
+    role: "assistant",
+    content: "",
+    toolCalls: [
+      {
+        id: toolCallId,
+        name: "shell",
+        status,
+        arguments: { command: "sleep 10" },
+        result: {},
+      },
+    ],
+    metadata: {},
+  };
+}
+
+describe("reconcileToolActivityTimings", () => {
+  it("captures the active tool start under its stable ID", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [{ id: "tool-1", startedAt: 1_000 }],
+          messages: [message("tool-1", "running")],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 1_000, durationMs: null },
+    });
+  });
+
+  it("uses first detection when the provider omits tool timing", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [{ id: "tool-1", startedAt: null }],
+          messages: [message("tool-1", "running")],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 4_000, durationMs: null },
+    });
+  });
+
+  it("captures every concurrently active tool by stable ID", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [
+            { id: "tool-1", startedAt: 1_000 },
+            { id: "tool-2", startedAt: 2_000 },
+          ],
+          messages: [
+            message("tool-1", "running"),
+            message("tool-2", "running"),
+          ],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 1_000, durationMs: null },
+      "tool-2": { startedAt: 2_000, durationMs: null },
+    });
+  });
+
+  it("captures a visible running call before its active snapshot arrives", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [],
+          messages: [message("tool-1", "running")],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 4_000, durationMs: null },
+    });
+  });
+
+  it("freezes elapsed time when the matching tool settles", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {
+          "tool-1": { startedAt: 1_000, durationMs: null },
+        },
+        {
+          activeTools: [],
+          messages: [message("tool-1", "complete")],
+          nowMs: 11_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 1_000, durationMs: 10_000 },
+    });
+  });
+
+  it("preserves object identity when no timing changes", () => {
+    const current = {
+      "tool-1": { startedAt: 1_000, durationMs: 10_000 },
+    };
+
+    expect(
+      reconcileToolActivityTimings(current, {
+        activeTools: [],
+        messages: [message("tool-1", "complete")],
+        nowMs: 20_000,
+      }),
+    ).toBe(current);
+  });
+});

@@ -1,0 +1,46 @@
+Mobile inline composer E2E
+Date: 2026-07-29
+Application: http://localhost:4000
+Route: /tracker/projects/symphony-mobile-review/assistant/explore
+Viewport: 390x844
+
+Flow:
+1. Opened the real Symphony tracker.
+2. Opened Symphony Mobile Review.
+3. Selected Assistant > Explore project.
+4. Asserted the project header uses one horizontal row.
+5. Asserted Add, permission, model, microphone, and Send are on one row.
+6. Sent: Teste E2E mobile inline: execute sleep 8 e depois responda apenas OK.
+7. Asserted Send changed to Stop execution without moving outside the row.
+8. Observed the real command activity: Running sleep 8.
+9. Waited for completion.
+10. Asserted the response was OK and the primary action returned to Send.
+11. Repeated the layout inspection at 1440x900 to check desktop preservation.
+
+Mobile idle assertions:
+- viewport: 390x844
+- toolbar single row: true
+- toolbar controls inside viewport: true
+- project header single row: true
+- header client width: 390
+- header scroll width: 984
+
+Mobile running assertions:
+- toolbar single row: true
+- toolbar controls inside viewport: true
+- Stop execution visible: true
+- Stop execution bounds: x=323, right=355, width=32
+
+Desktop assertions:
+- viewport: 1440x900
+- header client width equals scroll width: 1120
+- toolbar client width equals scroll width: 854
+
+Result: PASSED
+
+Recorded walkthrough:
+- Repeated the same real flow with `sleep 6`.
+- Captured 45 browser frames over 18 seconds at 390x844.
+- The recording includes idle, Stop execution, Running sleep 6, and OK states.
+- WebM codec: VP9, yuv420p.
+- MP4 codec: H.264, yuv420p, fast-start.

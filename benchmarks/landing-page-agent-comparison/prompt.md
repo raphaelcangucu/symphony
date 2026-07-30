@@ -14,6 +14,27 @@ A marca visível do produto é Dev10x. Use “Dev10x” como wordmark principal;
 de terminal. Não apresente “Symphony” como marca, produto ou título visível da
 landing page.
 
+Os assets oficiais já estão disponíveis em `public/dev10x/`. Use o arquivo real
+`public/dev10x/dev10x_logo_color.png` na navegação ou no hero, com este caminho
+público:
+
+```html
+<img src="/dev10x/dev10x_logo_color.png" alt="Dev10x" />
+```
+
+Use `/dev10x/favicon.svg` como favicon. As versões
+`/dev10x/dev10x_logo_black.png` e `/dev10x/dev10x_logo_white.png` podem ser
+usadas quando o contraste da superfície exigir. Não redesenhe, substitua,
+recolora, aplique filtros ou recrie em texto/SVG os logotipos fornecidos.
+
+Adote como tokens da marca a paleta canônica:
+
+- ink `#0F172A`;
+- violet `#7C3AED`;
+- blue `#2563EB`;
+- cyan `#38BDF8`;
+- white `#FFFFFF`.
+
 O copy deve ser concreto, confiante e conciso: mais contexto preservado, execução
 paralela quando útil e prova verificável antes da revisão. Evite promessas vagas
 de produtividade “10x”, superlativos sem evidência e jargão genérico de IA.
@@ -30,6 +51,8 @@ de produtividade “10x”, superlativos sem evidência e jargão genérico de I
 ## Conteúdo obrigatório
 
 - Navegação superior com a marca “Dev10x” e links para Visão, Fluxo, Agentes e Evidências.
+- Seções endereçáveis e estáveis com `id="visao"`, `id="fluxo"`,
+  `id="agentes"` e `id="evidencias"`, conectadas aos links da navegação.
 - Hero que conecte Dev10x a execução de engenharia verificável, com uma chamada principal e uma secundária.
 - Uma visualização do fluxo: tarefa → agente → workspace isolado → preview → evidência → revisão.
 - Cards distintos para Codex, Cursor e Claude, sem declarar que um deles é objetivamente melhor.
@@ -41,13 +64,16 @@ de produtividade “10x”, superlativos sem evidência e jargão genérico de I
 ## Direção visual
 
 - Aparência editorial e técnica, não um template SaaS genérico.
-- Construa uma identidade Dev10x própria: tipografia expressiva, alto contraste,
-  composição precisa e um acento cromático memorável. A solução pode ser escura,
-  clara ou híbrida, desde que pareça intencional e mantenha unidade visual.
+- Construa a interface a partir da identidade Dev10x fornecida: tipografia
+  expressiva, alto contraste, composição precisa e uso intencional da paleta
+  canônica. A solução pode ser escura, clara ou híbrida, desde que mantenha
+  unidade visual com o logotipo.
 - Use detalhes que remetam a uma linha de execução, telemetria ou passagem da
   intenção à prova, sem transformar toda a página em uma imitação de terminal.
 - Layout legível em desktop e mobile.
-- Use somente recursos locais: CSS, SVG inline ou elementos HTML. Não dependa de imagens remotas.
+- Use somente recursos locais: os assets oficiais em `public/dev10x/`, CSS, SVG
+  inline para elementos não relacionados ao logotipo ou elementos HTML. Não
+  dependa de imagens remotas.
 - Animações sutis devem respeitar `prefers-reduced-motion`.
 
 ## Qualidade e acessibilidade

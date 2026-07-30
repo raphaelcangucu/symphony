@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import { RUN_MATRIX, workflowPromptTemplate } from "../src/contract.mjs";
+import {
+  RUN_MATRIX,
+  runsForMatrix,
+  workflowPromptTemplate,
+} from "../src/contract.mjs";
+import * as provisionModule from "../src/provision.mjs";
 import {
   buildRunRecords,
   devEnvironmentSteps,
@@ -10,6 +19,10 @@ import {
   provisionSessions,
   workflowMarkdown,
 } from "../src/provision.mjs";
+
+async function sha256(path) {
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
 
 test("workspace project payload configures preview, evidence and local clone", () => {
   const payload = projectPayload({
@@ -42,7 +55,7 @@ test("workflow prompt injects the issue description without provider branches", 
   assert.equal(markdown.endsWith("{{ issue.description }}\n"), false);
 });
 
-test("all 18 run records carry the same prompt hash and explicit model contract", () => {
+test("all run records carry the same prompt hash and explicit model contract", () => {
   const prompt = "identical prompt\n";
   const records = buildRunRecords(prompt);
 
@@ -60,6 +73,61 @@ test("all 18 run records carry the same prompt hash and explicit model contract"
     records.every((run) => run.requested_model),
     true,
   );
+});
+
+test("run records can provision only the focused Dev10x brand matrix", () => {
+  const records = buildRunRecords(
+    "identical prompt\n",
+    runsForMatrix("dev10x-brand-high"),
+  );
+
+  assert.equal(records.length, 6);
+  assert.deepEqual(
+    new Set(records.map((run) => run.matrix)),
+    new Set(["dev10x-brand-high"]),
+  );
+});
+
+test("canonical Dev10x assets are copied into the seed with verified hashes", async () => {
+  assert.equal(typeof provisionModule.stageCanonicalBrandAssets, "function");
+
+  const seedRoot = await mkdtemp(join(tmpdir(), "dev10x-brand-seed-"));
+
+  try {
+    const manifest = await provisionModule.stageCanonicalBrandAssets(seedRoot);
+
+    assert.deepEqual(manifest.palette, {
+      ink: "#0F172A",
+      violet: "#7C3AED",
+      blue: "#2563EB",
+      cyan: "#38BDF8",
+      white: "#FFFFFF",
+    });
+    assert.deepEqual(Object.keys(manifest.assets).sort(), [
+      "dev10x_icon.png",
+      "dev10x_logo_black.png",
+      "dev10x_logo_color.png",
+      "dev10x_logo_white.png",
+      "favicon.png",
+      "favicon.svg",
+      "favicons/16x16.png",
+      "favicons/180x180.png",
+      "favicons/192x192.png",
+      "favicons/32x32.png",
+      "favicons/512x512.png",
+    ]);
+
+    for (const [relativeName, expectedHash] of Object.entries(
+      manifest.assets,
+    )) {
+      assert.equal(
+        await sha256(join(seedRoot, "public", "dev10x", relativeName)),
+        expectedHash,
+      );
+    }
+  } finally {
+    await rm(seedRoot, { recursive: true, force: true });
+  }
 });
 
 test("preview uses one explicit canonical serve step", () => {

@@ -5,6 +5,9 @@ export interface ModelProvenance {
   resolvedEffort: string | null;
 }
 
+export type ComposerPermissionLevel =
+  "ask_for_approval" | "approve_for_me" | "full_access";
+
 export interface AssistantThread {
   id: number;
   scope: string;
@@ -19,6 +22,8 @@ export interface AssistantThread {
   workspacePath: string | null;
   labels: string[];
   needsReview: boolean;
+  /** Optional for legacy/local thread snapshots; normalized API rows always provide it. */
+  permissionLevel?: ComposerPermissionLevel | null;
   title: string | null;
   status: string;
   preview: string | null;

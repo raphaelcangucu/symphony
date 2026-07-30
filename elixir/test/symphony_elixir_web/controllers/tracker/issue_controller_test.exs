@@ -186,12 +186,28 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         "target_identifier" => "MAC-2"
       })
 
-    assert %{"data" => %{"source_identifier" => "MAC-1", "target_identifier" => "MAC-2"}} =
+    assert %{
+             "data" => %{
+               "source_identifier" => "MAC-1",
+               "target_identifier" => "MAC-2",
+               "title" => "Blocking issue",
+               "status" => %{"name" => "Todo"}
+             }
+           } =
              json_response(blocker_conn, 201)
 
     list_blockers_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1/blockers")
 
-    assert %{"data" => [%{"source_identifier" => "MAC-1", "target_identifier" => "MAC-2"}]} =
+    assert %{
+             "data" => [
+               %{
+                 "source_identifier" => "MAC-1",
+                 "target_identifier" => "MAC-2",
+                 "title" => "Blocking issue",
+                 "status" => %{"name" => "Todo"}
+               }
+             ]
+           } =
              json_response(list_blockers_conn, 200)
 
     delete_conn =
@@ -596,7 +612,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         "title" => "Clear model",
         "status" => "Todo",
         "agent" => "claude",
-        "model" => "claude-sonnet-4-5",
+        "model" => "claude-sonnet-5",
         "effort" => "high"
       })
 

@@ -14,7 +14,7 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
   @fetch_timeout_ms 8_000
 
   @spec fetch(keyword()) ::
-          {:ok, %{agents: [map()], default_agent: String.t()}}
+          {:ok, map()}
           | {:error, {:assistant_catalog_unavailable, map()}}
   def fetch(opts \\ []) do
     fetchers = Keyword.get(opts, :fetchers, default_fetchers())
@@ -71,15 +71,30 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
           {agents, Map.put(failures, agent, {:invalid_catalog_result, result})}
       end)
 
-    if map_size(failures) == 0 do
+    # Provider discovery is independent. A missing local Cursor/OpenCode
+    # executable must not prevent the Codex/Claude options already discovered
+    # on this Machine from reaching the mobile composer.
+    if agents != [] do
       {:ok,
-       %{
-         agents: Enum.reverse(agents),
-         default_agent: Settings.Agents.default_agent_kind()
-       }}
+       %{agents: Enum.reverse(agents), default_agent: Settings.Agents.default_agent_kind()}
+       |> maybe_put_failures(failures)}
     else
       {:error, {:assistant_catalog_unavailable, failures}}
     end
+  end
+
+  defp maybe_put_failures(bundle, failures) when map_size(failures) == 0, do: bundle
+
+  # This bundle crosses the HTTP/RPC boundary. Provider discovery errors often
+  # include tuples, which Jason cannot encode; retain their diagnostic value as
+  # strings so one unavailable optional CLI never hides the other catalogs.
+  defp maybe_put_failures(bundle, failures) do
+    unavailable_agents =
+      Map.new(failures, fn {agent, reason} ->
+        {agent, inspect(reason)}
+      end)
+
+    Map.put(bundle, :unavailable_agents, unavailable_agents)
   end
 
   defp default_fetchers do

@@ -6,7 +6,10 @@ import { TurnSummaryStrip } from "@/components/agent-activity/typed-tools/TurnSu
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
 import { STREAMING_ASSISTANT_ID } from "@/components/assistant/assistantStream";
-import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS, CHAT_USER_BUBBLE_MAX_WIDTH_CLASS } from "@/components/assistant/chatTypography";
+import {
+  ASSISTANT_CHAT_MESSAGE_TEXT_CLASS,
+  CHAT_USER_BUBBLE_MAX_WIDTH_CLASS,
+} from "@/components/assistant/chatTypography";
 import {
   EditedFilesSummary,
   type OpenWorkspaceDiffRequest,
@@ -14,6 +17,7 @@ import {
 import { LinkifiedText } from "@/components/assistant/LinkifiedText";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
+import type { ToolActivityTimings } from "@/components/assistant/toolActivityTiming";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
@@ -22,7 +26,11 @@ import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
 import type { ToolPresentation } from "@/lib/toolCallPresentation";
 import { cn } from "@/lib/utils";
-import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
+import {
+  isVideoAttachmentSource,
+  isVideoMediaType,
+  projectAttachmentUrl,
+} from "@/services/attachments";
 import type { AssistantChatMessage, UserQuestion } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -45,7 +53,11 @@ interface AssistantChatMessageBubbleProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   planApprovalAction?: AssistantChatPlanApprovalAction;
   onKillTool?: (toolCallId: string) => void;
-  onFetchToolOutput?: (messageId: string, toolCallId: string) => Promise<string>;
+  onFetchToolOutput?: (
+    messageId: string,
+    toolCallId: string,
+  ) => Promise<string>;
+  toolTimings?: ToolActivityTimings;
 }
 
 function AssistantChatMessageBubbleComponent({
@@ -60,6 +72,7 @@ function AssistantChatMessageBubbleComponent({
   planApprovalAction,
   onKillTool,
   onFetchToolOutput,
+  toolTimings = {},
 }: AssistantChatMessageBubbleProps) {
   const isUser = message.role === "user";
   // Bind the enclosing message id so tool rows only need a tool-call id to fetch
@@ -68,7 +81,9 @@ function AssistantChatMessageBubbleComponent({
   const loadFullOutput = onFetchToolOutput
     ? (toolCallId: string) => onFetchToolOutput(messageId, toolCallId)
     : undefined;
-  const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
+  const attachments = Array.isArray(message.metadata.attachments)
+    ? message.metadata.attachments
+    : [];
   const assistantContentBlocks =
     message.role === "assistant" &&
     Array.isArray(message.contentBlocks) &&
@@ -80,11 +95,18 @@ function AssistantChatMessageBubbleComponent({
   // interactive-only turn/file summary chrome that would double-count edits.
   const fromSessionLog = message.metadata?.source === "session_log";
   const turnSummaryPresentations =
-    !fromSessionLog && !isUser && !isStreamingTurn && message.toolCalls.length > 0
+    !fromSessionLog &&
+    !isUser &&
+    !isStreamingTurn &&
+    message.toolCalls.length > 0
       ? toolCallsToPresentations(message.toolCalls)
       : null;
   const turnSummaryStrip = turnSummaryPresentations ? (
-    <TurnSummaryStrip presentations={turnSummaryPresentations} durationMs={0} className="mt-2" />
+    <TurnSummaryStrip
+      presentations={turnSummaryPresentations}
+      durationMs={0}
+      className="mt-2"
+    />
   ) : null;
   const editedFilesSummary =
     isUser || fromSessionLog ? null : (
@@ -101,6 +123,7 @@ function AssistantChatMessageBubbleComponent({
 
   return (
     <div
+      id={isUser ? `message-${message.id}` : undefined}
       className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
       data-testid="assistant-chat-message"
       data-role={isUser ? "user" : "assistant"}
@@ -119,7 +142,9 @@ function AssistantChatMessageBubbleComponent({
         )}
       >
         {attachments.length > 0 ? (
-          <div className={cn("mb-3 flex flex-wrap gap-2", isUser && "justify-end")}>
+          <div
+            className={cn("mb-3 flex flex-wrap gap-2", isUser && "justify-end")}
+          >
             {attachments.map((attachment, index) => (
               <AttachmentPreview
                 key={`${message.id}-attachment-${index}`}
@@ -141,18 +166,25 @@ function AssistantChatMessageBubbleComponent({
             taskSnapshot={taskSnapshot}
             onKillTool={onKillTool}
             onLoadFullOutput={loadFullOutput}
+            toolTimings={toolTimings}
           />
         ) : (
-          <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
+          <AssistantMarkdown
+            content={message.content}
+            onOpenDocumentPath={onOpenDocumentPath}
+          />
         )}
         {!assistantContentBlocks && message.toolCalls.length ? (
-          <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
+          <div
+            className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}
+          >
             <ToolActivityTimeline
               toolCalls={message.toolCalls}
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
               onLoadFullOutput={loadFullOutput}
               onOpenKbPath={onOpenDocumentPath}
+              toolTimings={toolTimings}
             />
             {turnSummaryStrip}
             {editedFilesSummary}
@@ -163,7 +195,9 @@ function AssistantChatMessageBubbleComponent({
             {editedFilesSummary}
           </>
         )}
-        {planApprovalAction ? <PlanApprovalButtons action={planApprovalAction} /> : null}
+        {planApprovalAction ? (
+          <PlanApprovalButtons action={planApprovalAction} />
+        ) : null}
       </article>
     </div>
   );
@@ -174,7 +208,9 @@ function AssistantChatMessageBubbleComponent({
  * history bubbles. Effective only while the panel keeps message objects and
  * callbacks referentially stable (and stabilizes the task snapshot).
  */
-export const AssistantChatMessageBubble = memo(AssistantChatMessageBubbleComponent);
+export const AssistantChatMessageBubble = memo(
+  AssistantChatMessageBubbleComponent,
+);
 
 function toolCallsToPresentations(
   toolCalls: AssistantChatMessage["toolCalls"],
@@ -192,7 +228,11 @@ function toolCallsToPresentations(
   );
 }
 
-function PlanApprovalButtons({ action }: { action: AssistantChatPlanApprovalAction }) {
+function PlanApprovalButtons({
+  action,
+}: {
+  action: AssistantChatPlanApprovalAction;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -249,8 +289,12 @@ function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
         <dl className="space-y-2">
           {rawQuestions.map((question) => (
             <div key={question.id}>
-              <dt className="font-medium">{question.question || question.header}</dt>
-              <dd className="text-muted-foreground">{answers[question.id] ?? "—"}</dd>
+              <dt className="font-medium">
+                {question.question || question.header}
+              </dt>
+              <dd className="text-muted-foreground">
+                {answers[question.id] ?? "—"}
+              </dd>
             </div>
           ))}
         </dl>
@@ -273,8 +317,12 @@ function AttachmentPreview({
 
   const record = attachment as Record<string, unknown>;
   const type = record.type;
-  const name = typeof record.name === "string" ? record.name : t("assistant.panel.attachmentLabel.default");
-  const mediaType = typeof record.media_type === "string" ? record.media_type : "";
+  const name =
+    typeof record.name === "string"
+      ? record.name
+      : t("assistant.panel.attachmentLabel.default");
+  const mediaType =
+    typeof record.media_type === "string" ? record.media_type : "";
   const data = typeof record.data === "string" ? record.data : "";
   const path = typeof record.path === "string" ? record.path : "";
 
@@ -290,19 +338,31 @@ function AttachmentPreview({
     }
 
     if (data) {
-      const src = data.startsWith("data:") ? data : `data:${mediaType || "image/png"};base64,${data}`;
-      return <AttachmentImage src={src} alt={name} className="max-h-40 max-w-full object-cover" />;
+      const src = data.startsWith("data:")
+        ? data
+        : `data:${mediaType || "image/png"};base64,${data}`;
+      return (
+        <AttachmentImage
+          src={src}
+          alt={name}
+          className="max-h-40 max-w-full object-cover"
+        />
+      );
     }
 
     return (
       <span
         className={cn(
           "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
-          isUser ? "border-primary-foreground/30 bg-primary-foreground/10" : "bg-muted/50",
+          isUser
+            ? "border-primary-foreground/30 bg-primary-foreground/10"
+            : "bg-muted/50",
         )}
       >
         <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{t("assistant.panel.attachmentLabel.image", { name })}</span>
+        <span className="truncate">
+          {t("assistant.panel.attachmentLabel.image", { name })}
+        </span>
       </span>
     );
   }
@@ -310,11 +370,21 @@ function AttachmentPreview({
   if (type === "file" && path) {
     if (projectSlug?.trim()) {
       const src = projectAttachmentUrl(projectSlug, path);
-      if (isVideoMediaType(mediaType) || isVideoAttachmentSource(name) || isVideoAttachmentSource(path)) {
+      if (
+        isVideoMediaType(mediaType) ||
+        isVideoAttachmentSource(name) ||
+        isVideoAttachmentSource(path)
+      ) {
         return (
           <figure className="max-w-full space-y-1">
-            <AttachmentVideo src={src} label={name} className="max-h-40 max-w-full rounded-lg border object-contain" />
-            <figcaption className="truncate text-[11px] text-muted-foreground">{name}</figcaption>
+            <AttachmentVideo
+              src={src}
+              label={name}
+              className="max-h-40 max-w-full rounded-lg border object-contain"
+            />
+            <figcaption className="truncate text-[11px] text-muted-foreground">
+              {name}
+            </figcaption>
           </figure>
         );
       }
@@ -326,7 +396,9 @@ function AttachmentPreview({
       <span
         className={cn(
           "inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs",
-          isUser ? "border-primary-foreground/30 bg-primary-foreground/10" : "bg-muted/50",
+          isUser
+            ? "border-primary-foreground/30 bg-primary-foreground/10"
+            : "bg-muted/50",
         )}
       >
         <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -340,11 +412,15 @@ function AttachmentPreview({
       <span
         className={cn(
           "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
-          isUser ? "border-primary-foreground/30 bg-primary-foreground/10" : "bg-muted/50",
+          isUser
+            ? "border-primary-foreground/30 bg-primary-foreground/10"
+            : "bg-muted/50",
         )}
       >
         <AudioLines className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{t("assistant.panel.attachmentLabel.audio", { name })}</span>
+        <span className="truncate">
+          {t("assistant.panel.attachmentLabel.audio", { name })}
+        </span>
       </span>
     );
   }

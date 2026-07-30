@@ -3,22 +3,20 @@ defmodule SymphonyElixir.Settings.Vault do
   Symmetric encryption for operator secrets stored in the local SQLite settings
   table (provider tokens edited via the UI).
 
-  Uses AES-256-GCM. The key is resolved, in order:
-
-    1. `SYMPHONY_CREDENTIALS_KEY` — base64-encoded 32 bytes (recommended for
-       production; rotate by re-saving each credential).
-    2. Otherwise derived as `SHA-256(secret_key_base)`, so encryption works out
-       of the box without extra configuration.
+  Uses AES-256-GCM with a purpose-derived key from the stable per-instance
+  secret. `SYMPHONY_CREDENTIALS_KEY` may provide that root explicitly;
+  otherwise it is persisted beside the local tracker database.
 
   Encrypting at rest means a stolen `tracker.sqlite3` alone cannot reveal tokens
   without also knowing the instance secret.
   """
 
-  @key_env "SYMPHONY_CREDENTIALS_KEY"
   @version "v1"
   @iv_bytes 12
   @tag_bytes 16
   @aad "symphony.credentials"
+
+  alias SymphonyElixir.InstanceSecret
 
   @doc "Encrypts plaintext into a self-describing, base64 blob."
   @spec encrypt(String.t()) :: String.t()
@@ -32,10 +30,8 @@ defmodule SymphonyElixir.Settings.Vault do
   @spec decrypt(String.t()) :: {:ok, String.t()} | :error
   def decrypt(@version <> ":" <> encoded) when is_binary(encoded) do
     with {:ok, binary} <- Base.decode64(encoded),
-         <<iv::binary-size(@iv_bytes), tag::binary-size(@tag_bytes), ciphertext::binary>> <- binary,
-         plaintext when is_binary(plaintext) <-
-           :crypto.crypto_one_time_aead(:aes_256_gcm, key(), iv, ciphertext, @aad, tag, false) do
-      {:ok, plaintext}
+         <<iv::binary-size(@iv_bytes), tag::binary-size(@tag_bytes), ciphertext::binary>> <- binary do
+      decrypt_with_candidates(iv, tag, ciphertext)
     else
       _ -> :error
     end
@@ -46,25 +42,43 @@ defmodule SymphonyElixir.Settings.Vault do
   def decrypt(_blob), do: :error
 
   defp key do
-    case System.get_env(@key_env) do
-      value when is_binary(value) and value != "" -> resolve_env_key(value)
-      _ -> derived_key()
-    end
+    InstanceSecret.derive("settings.vault.v1")
   end
 
-  defp resolve_env_key(value) do
-    case Base.decode64(String.trim(value)) do
-      {:ok, <<key::binary-size(32)>>} -> key
-      _ -> derived_key()
-    end
+  defp decrypt_with_candidates(iv, tag, ciphertext) do
+    [key(), legacy_key()]
+    |> Enum.uniq()
+    |> Enum.find_value(:error, fn candidate ->
+      case :crypto.crypto_one_time_aead(
+             :aes_256_gcm,
+             candidate,
+             iv,
+             ciphertext,
+             @aad,
+             tag,
+             false
+           ) do
+        plaintext when is_binary(plaintext) -> {:ok, plaintext}
+        _ -> false
+      end
+    end)
   end
 
-  defp derived_key do
-    secret =
-      :symphony_elixir
-      |> Application.get_env(SymphonyElixirWeb.Endpoint, [])
-      |> Keyword.get(:secret_key_base, "")
+  defp legacy_key do
+    case System.get_env("SYMPHONY_CREDENTIALS_KEY") do
+      value when is_binary(value) and value != "" ->
+        case Base.decode64(String.trim(value)) do
+          {:ok, <<key::binary-size(32)>>} -> key
+          _ -> key()
+        end
 
-    :crypto.hash(:sha256, secret)
+      _ ->
+        secret =
+          :symphony_elixir
+          |> Application.get_env(SymphonyElixirWeb.Endpoint, [])
+          |> Keyword.get(:secret_key_base, "")
+
+        :crypto.hash(:sha256, secret)
+    end
   end
 end

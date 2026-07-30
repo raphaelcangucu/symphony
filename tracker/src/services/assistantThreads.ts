@@ -7,7 +7,10 @@ import {
   requireNonBlank,
   requirePositiveInteger,
 } from "@/lib/serviceValidation";
-import type { AssistantThread } from "@/types/assistant-thread";
+import type {
+  AssistantThread,
+  ComposerPermissionLevel,
+} from "@/types/assistant-thread";
 import type { AgentKind } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -26,6 +29,7 @@ export interface BackendAssistantThreadDto {
   workspace_path?: unknown;
   labels?: unknown;
   needs_review?: unknown;
+  permission_level?: unknown;
   title?: string | null;
   status: string;
   preview?: string | null;
@@ -49,6 +53,7 @@ export function normalizeAssistantThread(
     workspacePath: normalizeNullableString(dto.workspace_path),
     labels: normalizeStringArray(dto.labels),
     needsReview: dto.needs_review === true,
+    permissionLevel: normalizePermissionLevel(dto.permission_level),
     title: dto.title ?? null,
     status: dto.status,
     preview: dto.preview ?? null,
@@ -69,6 +74,14 @@ function normalizeAgentKind(
     value === "claude" ||
     value === "cursor" ||
     value === "opencode"
+    ? value
+    : null;
+}
+
+function normalizePermissionLevel(value: unknown): ComposerPermissionLevel | null {
+  return value === "ask_for_approval" ||
+    value === "approve_for_me" ||
+    value === "full_access"
     ? value
     : null;
 }
@@ -162,6 +175,7 @@ export interface UpdateAssistantThreadInput {
   labels?: string[];
   needsReview?: boolean;
   agentKind?: AgentKind;
+  permissionLevel?: ComposerPermissionLevel;
 }
 
 const MAX_THREAD_TITLE_GRAPHEMES = 160;
@@ -172,6 +186,7 @@ const UPDATE_THREAD_KEYS = [
   "labels",
   "needsReview",
   "agentKind",
+  "permissionLevel",
 ] as const;
 const UPDATE_AGENT_KINDS = ["codex", "claude", "cursor", "opencode"] as const;
 
@@ -256,6 +271,7 @@ function normalizeUpdateAssistantThreadInput(
   labels?: string[];
   needs_review?: boolean;
   agent_kind?: AgentKind;
+  permission_level?: ComposerPermissionLevel;
 } {
   if (!isPlainObject(input)) {
     throw new Error("Assistant thread update input must be a plain object");
@@ -286,6 +302,7 @@ function normalizeUpdateAssistantThreadInput(
     labels?: string[];
     needs_review?: boolean;
     agent_kind?: AgentKind;
+    permission_level?: ComposerPermissionLevel;
   } = {};
   if (supportedKeys.includes("title")) {
     payload.title = normalizeTitle(input.title);
@@ -301,6 +318,15 @@ function normalizeUpdateAssistantThreadInput(
   }
   if (supportedKeys.includes("agentKind")) {
     payload.agent_kind = normalizeUpdateAgentKind(input.agentKind);
+  }
+  if (supportedKeys.includes("permissionLevel")) {
+    const permissionLevel = normalizePermissionLevel(input.permissionLevel);
+    if (!permissionLevel) {
+      throw new Error(
+        "permissionLevel must be one of: ask_for_approval, approve_for_me, full_access",
+      );
+    }
+    payload.permission_level = permissionLevel;
   }
   return payload;
 }

@@ -21,6 +21,7 @@ export interface TypedToolCardShellProps extends ActivityDisclosureStateProps {
   badges?: ToolPresentationBadge[];
   links?: ToolPresentationLink[];
   details?: ReactNode;
+  trailingAction?: ReactNode;
   defaultCollapsed?: boolean;
 }
 
@@ -41,6 +42,7 @@ export function TypedToolCardShell({
   badges = [],
   links = [],
   details = null,
+  trailingAction,
   defaultCollapsed = true,
   expanded,
   onExpandedChange,
@@ -102,12 +104,15 @@ export function TypedToolCardShell({
       }
       metadata={
         metadataParts.length > 0 ? (
-          <span className="flex min-w-0 items-center gap-1.5">{metadataParts}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            {metadataParts}
+          </span>
         ) : null
       }
       status={failed ? "failed" : running ? "running" : null}
       statusLabel={statusLabel}
       details={details}
+      trailingAction={trailingAction}
       defaultExpanded={!defaultCollapsed}
       expanded={expanded}
       onExpandedChange={onExpandedChange}

@@ -28,7 +28,8 @@ defmodule SymphonyElixir.Assistant.Thread do
     :requested_model,
     :requested_effort,
     :resolved_model,
-    :resolved_effort
+    :resolved_effort,
+    :client_request_id
   ]
 
   schema "assistant_threads" do
@@ -45,6 +46,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     field(:requested_effort, :string)
     field(:resolved_model, :string)
     field(:resolved_effort, :string)
+    field(:client_request_id, :string)
 
     has_many(:messages, Message, foreign_key: :thread_id)
 
@@ -69,6 +71,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_explore_index)
     |> unique_constraint(:issue_identifier, name: :assistant_threads_active_issue_index)
+    |> unique_constraint(:client_request_id, name: :assistant_threads_client_request_id_index)
   end
 
   defp validate_scope_fields(changeset) do

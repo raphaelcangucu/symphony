@@ -45,6 +45,22 @@ defmodule SymphonyElixir.SessionEventsTest do
     assert resumed["status"] == "running"
   end
 
+  test "steering stays in the durable transcript until the provider acknowledges it", %{
+    workspace: workspace
+  } do
+    assert {:ok, steer_id} = SessionEvents.append_steer_request(workspace, "Capture the E2E proof")
+    assert :ok = SessionEvents.append_steer_result(workspace, steer_id, :accepted)
+
+    assert {:ok, [queued, accepted], _} = SessionEvents.tail(workspace)
+    assert queued["kind"] == "user"
+    assert queued["title"] == "Queued message"
+    assert queued["body"] == "Capture the E2E proof"
+    assert queued["steer_id"] == steer_id
+    assert queued["steer_state"] == "queued"
+    assert accepted["steer_id"] == steer_id
+    assert accepted["steer_state"] == "accepted"
+  end
+
   test "tail and read_from stream appended entries", %{workspace: workspace} do
     assert :ok = SessionEvents.append_abort(workspace, "stall_timeout", detail: "No activity")
 

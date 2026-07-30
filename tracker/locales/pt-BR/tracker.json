@@ -509,21 +509,21 @@
       "dispatchStop": "Interrompendo agente…",
       "dispatchFailed": "Falha no dispatch",
       "executionMode": {
-        "title": "Mode",
+        "title": "Permissão",
         "plan": {
-          "label": "Plan",
-          "desc": "Somente leitura — analisa e planeja, sem editar",
-          "permission": "Somente leitura"
+          "label": "Pedir aprovação",
+          "desc": "Pergunta antes de editar arquivos, executar comandos ou usar a internet",
+          "permission": "Aprovação necessária"
         },
         "build": {
-          "label": "Build",
-          "desc": "Edita o workspace — pede aprovação antes de comandos e tools que alteram estado",
-          "permission": "Edições + aprovações"
+          "label": "Aprovar para mim",
+          "desc": "Pergunta apenas para ações detectadas como potencialmente inseguras",
+          "permission": "Somente ações inseguras"
         },
         "yolo": {
-          "label": "Yolo",
-          "desc": "Acesso total, aprovações ignoradas",
-          "permission": "Acesso total"
+          "label": "Acesso total",
+          "desc": "Acesso irrestrito à internet e aos arquivos deste computador",
+          "permission": "Sem aprovações"
         }
       },
       "mentions": {
@@ -769,6 +769,8 @@
         "read": "Leu",
         "edited": "Editou",
         "command": "Rodou",
+        "commandRunning": "Executando",
+        "commandComplete": "Executou",
         "files_one": "{{count}} arquivo",
         "files_other": "{{count}} arquivos",
         "running": "Trabalhando…",
@@ -2492,7 +2494,30 @@
       "moreTools": "Mais",
       "moreToolsAria": "Mais ferramentas do compositor",
       "modelChipAria": "Agente, modelo e raciocínio",
-      "compactModelMenu": "Configurações do modelo"
+      "compactModelMenu": "Configurações do modelo",
+      "add": "Adicionar",
+      "stopExecution": "Parar execução",
+      "permissionTitle": "Como as ações devem ser aprovadas?",
+      "permissionSaveFailed": "Falha ao salvar a permissão da conversa.",
+      "actions": {
+        "files": "Arquivos e pastas",
+        "context": "Contexto",
+        "diff": "Diff",
+        "kb": "Knowledge Base",
+        "magic": "Magic",
+        "goal": "Objetivo",
+        "commands": "Comandos e skills"
+      },
+      "queue": {
+        "steerNow": "Fazer steer agora",
+        "sendAgain": "Enviar novamente",
+        "remove": "Remover orientação da fila",
+        "more": "Mais opções para a orientação enfileirada",
+        "edit": "Editar mensagem",
+        "sideChat": "Abrir em chat lateral",
+        "disable": "Desativar fila",
+        "enable": "Ativar fila"
+      }
     },
     "goalDock": {
       "ariaLabel": "Goal",
@@ -2598,6 +2623,7 @@
       "stop": "Parar",
       "kill": "Matar",
       "staleHint": "Sem atualizações — Parar ou Matar?",
+      "staleHintPassive": "Sem atualizações",
       "killFailed": "Não foi possível matar esse comando. Parar o turno?",
       "verbs": {
         "pondering": "Refletindo",

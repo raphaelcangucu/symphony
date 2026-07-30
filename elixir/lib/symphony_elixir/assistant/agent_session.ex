@@ -100,6 +100,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -140,6 +141,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- persisted_thread_workspace(thread),
@@ -184,6 +186,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
@@ -228,6 +231,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          workspace <- kb_thread_workspace(thread),
@@ -292,6 +296,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
@@ -340,6 +345,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind) do
       continue_goal_turn(thread, context, opts, agent_kind)
     end
@@ -1146,6 +1152,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     Project tools available in this session (bound to `#{identifier}` when relevant): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output|prepare; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file, kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_link_task.
     Before moving to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview: prefer manage_preview status/start/restart (leased ports match the Preview dock); on crash use output then restart; if you must run serve yourself use prepare and run the returned command verbatim — never invent ports or unmanaged INSPIRE_PORT bring-up. Cite only in_sync URLs.
 
+    Durable mobile evidence: when this turn produces validation output, screenshots, video, traces, or reports that you mention in the final answer, copy those artifacts under `.symphony/evidence/` at the workspace root and write a valid `.symphony/evidence/manifest.json` for issue `#{identifier}`. Use only relative artifact paths in that manifest and include the command, status, and any desktop/mobile captures. Do not present a local filesystem path as a review link unless it is present in this durable manifest; the Android app reads only the persisted manifest artifacts over encrypted RPC.
+
     When to call update_issue:
     - Plan or acceptance criteria are defined and stable
     - A discovery changes the implementation approach
@@ -1944,22 +1952,50 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp persist_requested_model_provenance(thread, context, agent_kind)
        when is_map(thread) and is_map(context) and is_binary(agent_kind) do
-    model_present? = Map.has_key?(context, "model") or Map.has_key?(context, :model)
-    effort_present? = Map.has_key?(context, "effort") or Map.has_key?(context, :effort)
+    requested_model = Map.get(context, "model") || Map.get(context, :model)
+    requested_effort = Map.get(context, "effort") || Map.get(context, :effort)
 
-    if model_present? or effort_present? do
-      History.put_model_provenance(thread, %{
-        requested_model: Map.get(context, "model") || Map.get(context, :model),
-        requested_effort:
-          if(agent_kind == "cursor",
-            do: nil,
-            else: Map.get(context, "effort") || Map.get(context, :effort)
-          ),
-        resolved_model: nil,
-        resolved_effort: nil
-      })
+    provenance =
+      %{}
+      |> maybe_put_requested_provenance(:requested_model, requested_model)
+      |> maybe_put_requested_provenance(
+        :requested_effort,
+        if(agent_kind == "cursor", do: nil, else: requested_effort)
+      )
+
+    if map_size(provenance) > 0 do
+      History.put_model_provenance(thread, Map.merge(provenance, %{resolved_model: nil, resolved_effort: nil}))
     else
       {:ok, thread}
+    end
+  end
+
+  # A session creation already persists the selected model on its thread. Mobile
+  # transports may still include nullable preference keys on the first message;
+  # those placeholders must never erase that durable selection.
+  defp maybe_put_requested_provenance(provenance, _key, value)
+       when not is_binary(value),
+       do: provenance
+
+  defp maybe_put_requested_provenance(provenance, key, value) do
+    case String.trim(value) do
+      "" -> provenance
+      selected -> Map.put(provenance, key, selected)
+    end
+  end
+
+  defp put_requested_model_opts(opts, thread) when is_list(opts) and is_map(thread) do
+    opts
+    |> maybe_put_requested_model_opt(:model, History.requested_model(thread))
+    |> maybe_put_requested_model_opt(:effort, History.requested_effort(thread))
+  end
+
+  defp maybe_put_requested_model_opt(opts, _key, nil), do: opts
+
+  defp maybe_put_requested_model_opt(opts, key, value) when is_binary(value) do
+    case Keyword.get(opts, key) do
+      current when current in [nil, ""] -> Keyword.put(opts, key, value)
+      _explicit -> opts
     end
   end
 

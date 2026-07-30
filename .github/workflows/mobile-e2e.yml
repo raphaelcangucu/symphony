@@ -1,0 +1,116 @@
+name: mobile-encrypted-multi-host-e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-e2e.yml"
+      - "elixir/**"
+      - "mobile/**"
+
+permissions:
+  contents: read
+
+jobs:
+  android-multi-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    env:
+      DEV10X_E2E_REAL_AGENT: "0"
+      MIX_ENV: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Elixir and OTP
+        if: github.event_name == 'workflow_dispatch'
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          working_directory: elixir
+
+      - name: Install mobile image test tool
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+      - name: Install native E2E tools
+        if: github.event_name == 'workflow_dispatch'
+        run: sudo apt-get install -y ffmpeg jq tmux
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Validate mobile contracts
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run test
+
+      - name: Prepare Symphony host runtime
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: elixir
+        run: |
+          mix deps.get
+          mix compile
+          MIX_ENV=test mix test \
+            test/symphony_elixir/mobile_rpc \
+            test/symphony_elixir_web/mobile_rpc_socket_test.exs \
+            test/symphony_elixir_web/controllers/tracker/mobile_rpc_controller_test.exs \
+            test/symphony_elixir/push_notifications/native_sender_test.exs
+
+      - name: Build Android E2E APK
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: mobile
+        run: npm run build:android:e2e
+
+      - name: Enable KVM for Android emulator
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Record credentialless encrypted two-host RPC journey
+        if: github.event_name == 'workflow_dispatch'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: mobile/e2e/multi-host-smoke.sh mobile/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload MP4 and reports
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-multi-host-mobile-e2e
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            mobile/artifacts/e2e/*.mp4
+            mobile/artifacts/e2e/*.png
+            mobile/artifacts/e2e/*.md
+            mobile/artifacts/e2e/*.json
+            mobile/artifacts/e2e/*.xml
+            mobile/artifacts/e2e/*-trace.txt
