@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Symphony.BackupTest do
     backup_root = Path.join(tmp, "backups")
 
     File.mkdir_p!(Path.dirname(db))
-    File.write!(db, "mix-task-db")
+    File.write!(db, String.duplicate("mix-task-db", 100))
 
     Application.put_env(:symphony_elixir, SymphonyElixir.Repo, database: db)
     Application.put_env(:symphony_elixir, :backup_local_dir, backup_root)

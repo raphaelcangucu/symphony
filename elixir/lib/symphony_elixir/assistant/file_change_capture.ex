@@ -19,7 +19,7 @@ defmodule SymphonyElixir.Assistant.FileChangeCapture do
 
   @spec capture(Path.t(), [String.t()]) :: [file_capture()]
   def capture(workspace, paths) when is_binary(workspace) and is_list(paths) do
-    workspace_root = Path.expand(workspace)
+    workspace_root = canonical_path(workspace)
 
     paths
     |> Enum.filter(&is_binary/1)
@@ -73,7 +73,20 @@ defmodule SymphonyElixir.Assistant.FileChangeCapture do
 
   defp expand_candidate(workspace_root, path) do
     base = if Path.type(path) == :absolute, do: path, else: Path.join(workspace_root, path)
-    Path.expand(base)
+    canonical_path(base)
+  end
+
+  # `git rev-parse --show-toplevel` resolves macOS's `/var` symlink to
+  # `/private/var`. Canonicalize both sides before enforcing containment so
+  # valid paths are not mistaken for an escape.
+  defp canonical_path(path) do
+    expanded = Path.expand(path)
+    {dir, basename} = if File.dir?(expanded), do: {expanded, nil}, else: {Path.dirname(expanded), Path.basename(expanded)}
+
+    case System.cmd("pwd", ["-P"], cd: dir, stderr_to_stdout: true) do
+      {resolved, 0} -> Path.join([String.trim(resolved), basename] |> Enum.reject(&is_nil/1))
+      {_output, _status} -> expanded
+    end
   end
 
   defp within_root?(path, root), do: path == root or String.starts_with?(path, root <> "/")
