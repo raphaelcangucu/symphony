@@ -433,6 +433,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       position = attr(attrs, :position, next_issue_position(project.id, status.id))
       agent = attr(attrs, :agent)
       execution_settings = extract_execution_settings(attrs)
+      {identifier, issue_number} = next_identifier(project)
 
       attrs
       |> normalize_assignee_attrs(project.id)
@@ -440,11 +441,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Map.merge(%{
         project_id: project.id,
         status_id: status.id,
-        identifier: next_identifier(project),
+        identifier: identifier,
         position: position,
         agent: agent
       })
-      |> insert_issue(execution_settings)
+      |> insert_issue(execution_settings, issue_number)
     end
   end
 
@@ -1585,7 +1586,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp tap_roll_up_parent(result), do: result
 
-  defp insert_issue(attrs, execution_settings) when is_map(execution_settings) do
+  defp insert_issue(attrs, execution_settings, issue_number)
+       when is_map(execution_settings) and is_integer(issue_number) do
     result =
       %IssueRecord{}
       |> IssueRecord.changeset(attrs)
@@ -1595,6 +1597,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
     case result do
       {:ok, %IssueRecord{} = issue} ->
+        advance_project_issue_number(issue.project_id, issue_number)
+
         maybe_persist_execution_settings(
           project_slug_for_issue(issue),
           issue.identifier,
@@ -1862,9 +1866,20 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Enum.map(&identifier_number(&1, prefix))
       |> Enum.max(fn -> 0 end)
 
-    next_number = current_max + 1
+    next_number = max(current_max, project.last_issue_number || 0) + 1
 
-    "#{prefix}-#{next_number}"
+    {"#{prefix}-#{next_number}", next_number}
+  end
+
+  # Issue identifiers are referenced by durable sessions, evidence, and other
+  # external records. Reusing a deleted identifier would attach that history to
+  # a different task, so keep a monotonic per-project high-water mark.
+  defp advance_project_issue_number(project_id, issue_number) do
+    Project
+    |> where([project], project.id == ^project_id and project.last_issue_number < ^issue_number)
+    |> Repo.update_all(set: [last_issue_number: issue_number])
+
+    :ok
   end
 
   defp identifier_number(identifier, prefix) do

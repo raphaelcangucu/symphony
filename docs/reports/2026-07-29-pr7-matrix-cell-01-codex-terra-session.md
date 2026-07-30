@@ -1,29 +1,36 @@
-# PR #7 — matriz real, célula 01
+# PR #7 — matriz real, célula 01 (reiniciada)
 
 Status: concluída e aguardando revisão antes da célula 02.
 
-Esta é a única célula oficial iniciada nesta rodada. A task `VIN-9` foi criada
-pelo App Android e abriu uma sessão isolada no Host Symphony real:
+Esta substitui integralmente a tentativa anterior de C1. A única evidência
+oficial desta célula foi iniciada no App Android contra o Host Symphony real:
 
+- task: `VIN-10` — `C1 Codex Terra High Session - health`;
+- sessão: `#14`, `issue_session`, em workspace isolado `VIN-10__p1`;
 - provider: Codex CLI;
-- modelo: `gpt-5.6-terra`;
-- effort: `high`;
-- sessão: `#13`;
-- workspace: `VIN-9__p1`;
-- objetivo: implementar e validar a rota `/health` no repositório `website`.
+- modelo/effort solicitado e resolvido: `gpt-5.6-terra` / `high`;
+- escopo: implementar `/health` apenas no repositório `website`.
 
-O Host executou a página, os testes E2E focados (`/health` e regressão da
-landing), o build de produção e `git diff --check`. Todos concluíram com êxito.
-As tentativas intermediárias que falharam durante a descoberta foram preservadas
-no log expansível; o cartão consolidado do App agora apresenta `Done` quando o
-turno final conclui e informa as falhas recuperadas sem escondê-las.
+## Resultado verificável
 
-Os binários, trace, logs, manifesto, proveniência e hashes desta célula ficam
-somente no [Gist canônico do PR #7](https://gist.github.com/raphaelcangucu/89652c626c9583cb9b0c52d8d5b2a708).
-Incluem a gravação do fluxo Android que cria a task e abre a sessão, uma gravação
-de verificação do estado final, screenshots do App, capturas desktop/mobile do
-site, vídeo, trace e relatórios E2E do Host.
+- `npm run test:e2e`: **4 passaram** (inclui `/health`, desktop e mobile);
+- `npm run build`: **passou**;
+- nenhuma simulação de servidor ou provider foi usada;
+- o App Android abriu os links **Desktop** e **Mobile** diretamente no
+  visualizador nativo de artefatos duráveis, via RPC criptografado.
 
-Nenhum asset de execuções anteriores, workspaces anteriores ou sessões de
-diagnóstico é aceito como evidência desta célula. A próxima célula só pode ser
-criada após revisão explícita desta publicação.
+## Evidência externa e imutável
+
+Cada célula recebe seu próprio Gist. O pacote completo e exclusivo de C1 está
+em [Cell 01 — VIN-10](https://gist.github.com/raphaelcangucu/3c5c02bafca17245b47c1e271aa120e6):
+
+- vídeo E2E do App Android e três screenshots do App;
+- screenshots desktop/mobile de `/health`, vídeo Playwright e trace;
+- logs de E2E e build;
+- manifesto, proveniência da sessão, transcript e SHA-256;
+- checagem de hash do vídeo Android publicada no Gist e no Host.
+
+O repositório contém somente esta referência Markdown; os binários não ficam
+em `docs/pr-assets` nem no PR.
+
+Não avance para C2 antes da revisão humana explícita desta publicação.
