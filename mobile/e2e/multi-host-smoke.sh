@@ -12,6 +12,7 @@ readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
 readonly SINGLE_CELL_E2E="${DEV10X_SINGLE_CELL_E2E:-0}"
 readonly TASK_ACTIONS_ONLY="${DEV10X_TASK_ACTIONS_E2E:-0}"
+readonly ORCHESTRATOR_STEER_ONLY="${DEV10X_ORCHESTRATOR_STEER_E2E:-0}"
 readonly ARTIFACT_SLUG="$(
   if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
     printf "pr-7-dev10x-single-cell-real-host-review"
@@ -25,6 +26,7 @@ readonly RAW_VIDEO_SEGMENT_PREFIX="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw-part"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
 readonly CHAT_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-chat.png"
 readonly ORCHESTRATOR_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-orchestrator.png"
+readonly ORCHESTRATOR_STEER_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-orchestrator-steer.png"
 readonly TERMINAL_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal.png"
 readonly TERMINAL_COMMAND_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal-command.png"
 readonly TASK_EVIDENCE_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-evidence.png"
@@ -59,6 +61,10 @@ if [[ "${SINGLE_CELL_E2E}" != "0" && "${SINGLE_CELL_E2E}" != "1" ]]; then
 fi
 if [[ "${TASK_ACTIONS_ONLY}" != "0" && "${TASK_ACTIONS_ONLY}" != "1" ]]; then
   printf "DEV10X_TASK_ACTIONS_E2E must be 0 or 1\n" >&2
+  exit 1
+fi
+if [[ "${ORCHESTRATOR_STEER_ONLY}" != "0" && "${ORCHESTRATOR_STEER_ONLY}" != "1" ]]; then
+  printf "DEV10X_ORCHESTRATOR_STEER_E2E must be 0 or 1\n" >&2
   exit 1
 fi
 
@@ -701,10 +707,10 @@ launch_session_panel() {
 }
 
 launch_task_execution() {
-  local route="symphony://h/${host_a_id}/run/${seeded_execution_session_id}?identifier=${host_a_issue}&projectSlug=${HOST_A_PROJECT}&agent=codex&status=completed"
-  # adb joins shell arguments into a remote shell command, so unescaped query
-  # separators would background `am start` and execute the remaining flags.
-  route="${route//&/\\&}"
+  # Execution sessions use the same durable assistant thread as a direct chat.
+  # Keep the E2E entry point on that unified surface so it exercises grouped
+  # activities, task context, Steer and Queue rather than the retired log view.
+  local route="symphony://h/${host_a_id}/chat/${seeded_execution_session_id}?name=${host_a_issue}%20execution"
   "${ADB}" shell am start -W \
     -a android.intent.action.VIEW \
     -d "${route}" \
@@ -756,6 +762,10 @@ assert_task_session_evidence() {
   tap_accessible "Plan mode"
   trace_step "assert Plan mode is selected from the composer action sheet"
 
+  # Choosing a mode intentionally keeps the sheet open so the operator can
+  # combine actions. Close it before asking the underlying composer to open
+  # another action; otherwise the UI test taps an obscured control.
+  tap_accessible "Done with composer actions"
   tap_accessible "Open composer actions"
   tap_accessible "Magic"
   wait_for_ui_contains "E2E review"
@@ -893,8 +903,14 @@ wait_for_ui_contains "${HOST_A_NAME} is online"
 wait_for_selector "content-desc" "Message"
 trace_step "assert rich chat opens by default with real persisted host history"
 
-assert_task_session_evidence
 if [[ "${TASK_ACTIONS_ONLY}" == "0" ]]; then
+if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
+  trace_step "skip unrelated chat, terminal and task-detail checks for focused Android orchestrator steer E2E"
+  tap_accessible "Go back"
+  wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  trace_step "return from direct chat to the workspace panel before opening the orchestrator execution"
+else
+assert_task_session_evidence
 tap_accessible "Go back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 tap_accessible "${HOST_A_NAME} — Direct RPC session"
@@ -968,6 +984,7 @@ tap_accessible "Back"
 wait_for_ui_contains "${host_a_issue}"
 tap_accessible "Back to worktrees"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
+fi
 
 if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   dispatch_orchestrator_run \
@@ -984,14 +1001,22 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   wait_for_selector "content-desc" "Connection status: Live" 180
   trace_step "assert real orchestrator execution transcript opens in the same rich chat"
 
+  # `send_message` on an issue_execution session is intentionally routed by
+  # the real Host to `Orchestrator.steer/4`, never to a second chat worker.
+  # Keep this assertion inside a Live execution: it proves the Android
+  # composer can steer the active orchestration without forking its task
+  # transcript or losing the durable operator instruction.
   tap_accessible "Message"
-  input_text "Reply exactly ACK73"
+  input_text "Steer this execution: reply exactly STEERED73 before finalizing."
   wait_for_enabled_accessible "Send"
   tap_accessible "Send"
-  wait_for_assistant_text "ACK73" 180
+  wait_for_ui_contains "Steer this execution: reply exactly STEERED73 before finalizing." 45
+  wait_for_assistant_text "STEERED73" 180
   "${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
   test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"
-  trace_step "assert mobile follow-up was accepted and streamed back from the real orchestrator"
+  "${ADB}" exec-out screencap -p >"${ORCHESTRATOR_STEER_SCREENSHOT_PATH}"
+  test -s "${ORCHESTRATOR_STEER_SCREENSHOT_PATH}"
+  trace_step "assert Android composer steer stayed in execution ${orchestrator_session_id} and was answered by the real orchestrator"
 
   tap_accessible "Go back"
   wait_for_text "Orchestrator runs"
@@ -1140,16 +1165,21 @@ apk_sha256="$(sha256sum "${APK_PATH}" | awk '{print $1}')"
 video_sha256="$(sha256sum "${VIDEO_PATH}" | awk '{print $1}')"
 generated_at="$(date -Iseconds)"
 
-if [[ "${TASK_ACTIONS_ONLY}" == "1" ]]; then
+if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
+  scenario="Dev10x Android in-flight orchestrator steer against a real Symphony host"
+  interactive_chat="not exercised by this focused journey"
+  orchestrator_chat="real task execution, Android composer steer and provider acknowledgement over selected-host RPC"
+  journey="deep-link pairing, Machine/Project/Workspace hierarchy, real task orchestration, Android steer in the live execution transcript and provider acknowledgement"
+elif [[ "${TASK_ACTIONS_ONLY}" == "1" ]]; then
   scenario="Symphony canonical project flow, task detail and composer actions against a real host"
   interactive_chat="persisted task-associated execution over selected-host RPC"
   orchestrator_chat="not exercised by this focused journey"
   journey="deep-link pairing, Home/Machines, Projects, visible project Workspace/Task execution/Task navigation, project-scoped New session, associated task Summary/PR/Comments/Evidence/Sessions, Plan mode, Magic template, and structured issue context"
 elif [[ "${REAL_AGENT_E2E}" == "1" ]]; then
-  scenario="Dev10x rich chat, real session history and orchestrator follow-up against real Symphony host"
+  scenario="Dev10x rich chat, real session history and in-flight orchestrator steer against real Symphony host"
   interactive_chat="real local agent turn over selected-host RPC"
-  orchestrator_chat="real execution transcript and follow-up over selected-host RPC"
-  journey="deep-link pairing, host identity/health, chat-first real local agent turn, history restore, tools, terminal, standalone task/comment and evidence, files, diff, real orchestrator transcript and follow-up, offline recovery and settings"
+  orchestrator_chat="real execution transcript and Android steer over selected-host RPC"
+  journey="deep-link pairing, host identity/health, chat-first real local agent turn, history restore, tools, terminal, standalone task/comment and evidence, files, diff, real orchestrator transcript and in-flight Android steer, offline recovery and settings"
 else
   scenario="Dev10x credentialless CI contract against real Symphony host"
   interactive_chat="persisted selected-host history; provider-authenticated turn reserved for local E2E"
@@ -1177,6 +1207,7 @@ jq -n \
   --argjson host_count "${host_count}" \
   --argjson single_cell "${SINGLE_CELL_E2E}" \
   --argjson task_actions_only "${TASK_ACTIONS_ONLY}" \
+  --argjson orchestrator_steer_only "${ORCHESTRATOR_STEER_ONLY}" \
   --argjson real_agent "${REAL_AGENT_E2E}" \
   '{
     status:"passed",
@@ -1185,6 +1216,7 @@ jq -n \
     hosts:$host_count,
     single_cell:($single_cell == 1),
     task_actions_only:($task_actions_only == 1),
+    orchestrator_steer_only:($orchestrator_steer_only == 1),
     real_agent_e2e:($real_agent == 1),
     interactive_chat:$interactive_chat,
     orchestrator_chat:$orchestrator_chat,

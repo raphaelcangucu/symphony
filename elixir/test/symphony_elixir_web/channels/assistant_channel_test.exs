@@ -2347,6 +2347,93 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
              History.list_messages_for_thread(thread.id)
   end
 
+  test "E2E: a mobile composer instruction steers the live orchestrator in its existing task session", %{socket: socket} do
+    alias SymphonyElixir.Agent.ExecutionSession
+    alias SymphonyElixir.{Issue, Orchestrator}
+
+    workspace_path =
+      Path.join(System.tmp_dir!(), "symphony-assistant-execution-steer-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf!(workspace_path) end)
+
+    {:ok, thread} =
+      ExecutionSession.ensure("macro-markets", "MAC-STEER-E2E",
+        workspace_path: workspace_path,
+        agent_kind: "codex"
+      )
+
+    orchestrator = Process.whereis(Orchestrator)
+    assert is_pid(orchestrator)
+    original_state = :sys.get_state(orchestrator)
+
+    on_exit(fn ->
+      if Process.alive?(orchestrator), do: :sys.replace_state(orchestrator, fn _ -> original_state end)
+    end)
+
+    issue = %Issue{
+      id: "issue-steer-e2e",
+      identifier: "MAC-STEER-E2E",
+      title: "Mobile steer E2E",
+      description: "Prove an execution-session steer reaches the active worker.",
+      state: "In Progress",
+      url: "https://example.org/issues/MAC-STEER-E2E"
+    }
+
+    running_entry = %{
+      pid: self(),
+      ref: make_ref(),
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: "mobile-steer-e2e",
+      turn_count: 1,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(orchestrator, fn state ->
+      %{state | running: Map.put(state.running, issue.id, running_entry)}
+    end)
+
+    {:ok, _join_payload, socket} =
+      subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref =
+      push(socket, "send_message", %{
+        "message" => "Steer: verify the Android flow before finalizing."
+      })
+
+    assert_reply(ref, :ok, %{steered: true})
+
+    assert_push("message_created", %{
+      message: %{
+        role: "user",
+        content: "Steer: verify the Android flow before finalizing.",
+        metadata: %{"delivery" => "steer", "kind" => "execution_instruction"}
+      }
+    })
+
+    assert_receive {
+                     :codex_steer,
+                     [%{"type" => "text", "text" => "Steer: verify the Android flow before finalizing."}],
+                     channel_pid
+                   },
+                   1_000
+
+    assert is_pid(channel_pid)
+
+    assert [
+             %{
+               content: "Steer: verify the Android flow before finalizing.",
+               metadata: %{"delivery" => "steer", "kind" => "execution_instruction"}
+             }
+           ] = History.list_messages_for_thread(thread.id)
+  end
+
   test "issue thread send_message routes to the issue working tree", %{socket: socket} do
     workspace_root =
       Path.join(System.tmp_dir!(), "symphony-assistant-channel-workspaces-#{System.unique_integer([:positive])}")

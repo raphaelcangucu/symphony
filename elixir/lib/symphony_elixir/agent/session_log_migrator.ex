@@ -140,8 +140,15 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   end
 
   defp candidate_workspaces(nil) do
-    Context.list_projects()
-    |> Enum.flat_map(fn project -> candidate_workspaces(project.slug) end)
+    # This function is invoked by the historical 20260717120000 data
+    # migration.  Do not hydrate the current Project schema here: newer
+    # fields (for example `last_issue_number`) may not exist yet while that
+    # migration is being applied to a fresh database.
+    Repo.query!(
+      "SELECT slug FROM local_tracker_projects WHERE archived_at IS NULL ORDER BY name"
+    )
+    |> Map.fetch!(:rows)
+    |> Enum.flat_map(fn [slug] -> candidate_workspaces(slug) end)
   end
 
   defp candidate_workspaces(project_slug) when is_binary(project_slug) do
