@@ -358,6 +358,55 @@ mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the
 
 No workflow file argument — config comes from `elixir/.env` and the DB, same as `make serve`.
 
+### Remote MCP for external LLMs
+
+Symphony exposes a persistent, bearer-authenticated [Model Context Protocol](https://modelcontextprotocol.io/)
+endpoint for external LLM clients:
+
+```text
+https://<your-symphony-host>/api/mcp
+```
+
+Configure the client as an HTTP/Streamable HTTP MCP server and send the tracker token on every
+request:
+
+```text
+Authorization: Bearer <SYMPHONY_TRACKER_TOKEN>
+```
+
+The endpoint is intended for server-to-server clients. Publish it only behind HTTPS (for example,
+via the existing public tunnel or a reverse proxy); never expose the tracker token in browser code.
+The same token protects the tracker API and MCP. To revoke MCP access, rotate
+`SYMPHONY_TRACKER_TOKEN` and restart the daemon.
+
+`tools/list` exposes the existing Symphony assistant tools. Project-scoped tools add a required
+`project_slug` argument because an external MCP client has no tracker project selected. Start with
+`list_tracker_projects`; those discovery tools do not need a project slug. The v1 endpoint returns
+single JSON-RPC responses and intentionally does not open an SSE stream.
+
+#### Available MCP tools
+
+The following discovery tools do not require `project_slug`:
+
+- `list_tracker_projects`
+- `list_linear_projects`
+- `list_jira_projects`
+
+Every other tool requires `project_slug` in its arguments:
+
+| Area | Tools |
+| --- | --- |
+| Issues and comments | `list_issues`, `get_issue`, `create_issue`, `create_draft_issue`, `update_issue`, `move_issue`, `add_comment`, `list_comments`, `update_comment`, `delete_comment`, `get_issue_form_options`, `sync_issue`, `manage_blockers` |
+| Agent runs and orchestration | `dispatch_coding_agent`, `dispatch_codex`, `list_running_agents`, `steer_agent`, `goal`, `get_agent_executions`, `get_issue_orchestrator_state`, `explain_dispatch_eligibility`, `check_handoff_gate`, `get_evidence_status` |
+| Subtasks and execution bundles | `classify_execution_unit`, `create_subtask`, `set_issue_parent`, `get_execution_bundle`, `preview_execution_plan`, `define_shared_contract`, `update_shared_contract`, `query_bundle_status`, `report_unit_status` |
+| Workspaces, previews, and environment | `list_project_repositories`, `update_project_repositories`, `update_project_workflow`, `read_workspace_file`, `manage_preview`, `list_previews`, `manage_tunnel`, `manage_dev_env`, `scan_project_setup`, `suggest_project_setup` |
+| Pull requests and GitHub | `list_pull_requests`, `link_pull_request`, `list_github_projects`, `provision_github_project`, `create_github_tracker_project` |
+| Templates and knowledge base | `get_template`, `list_templates`, `get_workflow`, `kb_list_repositories`, `kb_search_pages`, `kb_read_page`, `kb_create_page`, `kb_update_page`, `kb_delete_page`, `kb_delete_asset`, `kb_delete_folder`, `kb_link_task`, `kb_sync` |
+| Imports | `import_notion_page` |
+
+Use `tools/list` as the source of truth for schemas and descriptions. The exact options and required
+arguments of each tool are returned in its MCP `inputSchema`.
+
 ## Configuration
 
 Configuration is split into two layers:
