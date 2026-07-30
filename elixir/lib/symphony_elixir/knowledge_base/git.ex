@@ -108,8 +108,7 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
 
   @spec commit(Path.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def commit(dir, message, opts \\ []) do
-    name = Keyword.get(opts, :name, "Symphony")
-    email = Keyword.get(opts, :email, "symphony-kb@localhost")
+    {name, email} = commit_identity(opts)
     args = ["-c", "user.name=#{name}", "-c", "user.email=#{email}", "commit", "-m", message]
 
     with {:ok, _} <- run(dir, args, opts) do
@@ -185,8 +184,7 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
   @spec merge(Path.t(), String.t(), keyword()) ::
           {:ok, :merged | :up_to_date} | {:error, :merge_conflict | term()}
   def merge(dir, ref, opts \\ []) do
-    name = Keyword.get(opts, :name, "Symphony")
-    email = Keyword.get(opts, :email, "symphony-kb@localhost")
+    {name, email} = commit_identity(opts)
     args = ["-c", "user.name=#{name}", "-c", "user.email=#{email}", "merge", "--no-edit", ref]
 
     case run(dir, args, opts) do
@@ -240,6 +238,19 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
 
   defp branch_exists?(checkout, branch, opts),
     do: ref_exists?(checkout, "refs/heads/#{branch}", opts)
+
+  # Optional form values can arrive as nil or empty strings. Do not let either
+  # replace the deterministic identity used for automated documentation commits.
+  defp commit_identity(opts) do
+    {option_or_default(opts, :name, "Symphony"), option_or_default(opts, :email, "symphony-kb@localhost")}
+  end
+
+  defp option_or_default(opts, key, default) do
+    case Keyword.get(opts, key) do
+      value when is_binary(value) and value != "" -> value
+      _ -> default
+    end
+  end
 
   defp ref_exists?(checkout, ref, opts) do
     match?({:ok, _}, run(checkout, ["rev-parse", "--verify", "--quiet", ref], opts))
