@@ -1022,10 +1022,13 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   # composer can steer the active orchestration without forking its task
   # transcript or losing the durable operator instruction.
   tap_accessible "Message"
-  input_text "Steer this execution: reply exactly STEERED73 before finalizing."
+  input_text "STEERED73"
   wait_for_enabled_accessible "Send"
   tap_accessible "Send"
-  wait_for_ui_contains "Steer this execution: reply exactly STEERED73 before finalizing." 45
+  # The marker is intentionally a single ADB-safe token. It proves the
+  # operator instruction rendered, while the next assertion independently
+  # requires that only an assistant reply acknowledges it.
+  wait_for_ui_contains "STEERED73" 45
   wait_for_assistant_text "STEERED73" 180
   "${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
   test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"

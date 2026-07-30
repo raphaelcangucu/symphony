@@ -135,7 +135,8 @@ codex:
         Validate the complete Dev10x Mobile journey against this real encrypted
         Symphony host. Exercise the task, session, terminal, files, diff and
         evidence surfaces. When dispatched, reply exactly `READY73`, finish the
-        initial turn, then accept the operator follow-up in the same transcript.
+        initial turn, then reply exactly `STEERED73` when an operator follow-up
+        contains that marker in the same transcript.
         """,
         else: "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
       ),
