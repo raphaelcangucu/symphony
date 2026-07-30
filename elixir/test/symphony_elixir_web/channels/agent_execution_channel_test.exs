@@ -3,8 +3,6 @@ defmodule SymphonyElixirWeb.AgentExecutionChannelTest do
 
   import Phoenix.ChannelTest
 
-  alias SymphonyElixir.AgentExecution.Broadcaster
-
   @endpoint SymphonyElixirWeb.Endpoint
   @topic "agent_executions"
 
@@ -26,7 +24,11 @@ defmodule SymphonyElixirWeb.AgentExecutionChannelTest do
   test "relays PubSub agent execution events", %{socket: _socket} do
     assert_push("snapshot", _)
 
-    assert :ok = Broadcaster.notify()
+    Phoenix.PubSub.broadcast(
+      SymphonyElixir.PubSub,
+      @topic,
+      {:agent_execution_event, "snapshot", %{"data" => []}}
+    )
 
     assert_push("snapshot", %{"data" => data}, 1_000)
     assert is_list(data)

@@ -119,7 +119,7 @@ defmodule SymphonyElixir.WorkspaceTest do
     SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
       tracker_kind: "local",
       workspace_root: root,
-      hook_after_create: "mkdir -p front/.git/info"
+      hook_after_create: "mkdir -p front && git -C front init -q"
     )
 
     issue = %Issue{project_slug: "alpha", identifier: "A-2"}

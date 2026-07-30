@@ -4,9 +4,11 @@ defmodule SymphonyElixir.Terminal.TabStoreTest do
   alias SymphonyElixir.Terminal.TabStore
 
   setup do
-    start = TabStore.start_link(name: TabStoreTest)
-    on_exit(fn -> GenServer.stop(TabStoreTest, :normal, 5000) end)
-    start
+    on_exit(fn ->
+      for id <- ["tab-1", "tab-2"], do: TabStore.delete("demo", "DEMO-1", id)
+    end)
+
+    :ok
   end
 
   test "stores and lists tabs scoped to project and issue" do

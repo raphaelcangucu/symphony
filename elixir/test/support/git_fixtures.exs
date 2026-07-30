@@ -16,7 +16,14 @@ defmodule SymphonyElixir.GitFixtures do
   """
   @spec make_repo!(Path.t(), Path.t(), String.t()) :: Path.t()
   def make_repo!(tmp_dir, workspace, name) do
-    origin = Path.join(tmp_dir, "#{name}-origin.git")
+    workspace_id =
+      workspace
+      |> Path.expand()
+      |> then(&:crypto.hash(:sha256, &1))
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 16)
+
+    origin = Path.join(tmp_dir, "#{name}-#{workspace_id}-origin.git")
     repo = Path.join(workspace, name)
     File.mkdir_p!(origin)
     File.mkdir_p!(repo)

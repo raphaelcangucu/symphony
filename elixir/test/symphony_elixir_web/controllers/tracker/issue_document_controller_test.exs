@@ -43,7 +43,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueDocumentControllerTest do
       })
 
     {:ok, issue} = Context.create_issue(@project_slug, %{"title" => "Document review", "status" => "Todo"})
-    doc_path = write_issue_document!(workspace_root, issue.identifier, "x.md", "# X Design\n\ncontent")
+    doc_path = write_issue_document!(workspace_root, @project_slug, issue.identifier, "x.md", "# X Design\n\ncontent")
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
@@ -104,8 +104,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueDocumentControllerTest do
            }
   end
 
-  defp write_issue_document!(workspace_root, identifier, filename, content) do
-    specs_dir = Path.join([workspace_root, identifier, "docs", "superpowers", "specs"])
+  defp write_issue_document!(workspace_root, project_slug, identifier, filename, content) do
+    specs_dir = Path.join([workspace_root, project_slug, identifier, "docs", "superpowers", "specs"])
     File.mkdir_p!(specs_dir)
     path = Path.join(specs_dir, filename)
     File.write!(path, content)

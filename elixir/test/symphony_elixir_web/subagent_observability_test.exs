@@ -6,7 +6,7 @@ defmodule SymphonyElixirWeb.SubagentObservabilityTest do
   """
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Issue
+  alias SymphonyElixir.{Issue, Settings}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.Repo
@@ -17,6 +17,8 @@ defmodule SymphonyElixirWeb.SubagentObservabilityTest do
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
 
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+    {:ok, false} = Settings.put("lab", "bundle_child_orchestration", false)
+    on_exit(fn -> Settings.put("lab", "bundle_child_orchestration", false) end)
     :ok
   end
 
@@ -118,6 +120,7 @@ defmodule SymphonyElixirWeb.SubagentObservabilityTest do
   end
 
   test "gated subagent units surface as waiting rows under the coordinator while the dep-free unit runs live" do
+    assert {:ok, true} = Settings.put("lab", "bundle_child_orchestration", true)
     seed_coordinator_bundle!()
 
     running = %{

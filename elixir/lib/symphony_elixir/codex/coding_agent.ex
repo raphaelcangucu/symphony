@@ -849,14 +849,20 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   # interactive and goal-mode runs. Resolving a workspace sidecar remains
   # goal-only so ordinary orchestrator turns still start independent threads.
   defp resumable_thread_id(workspace, opts, section) do
-    case Keyword.get(opts, :conversation_ref) do
-      %ConversationRef{provider: "codex", conversation_id: conversation_id} ->
-        {:ok, conversation_id}
+    case Keyword.get(opts, :resume_thread_id) do
+      thread_id when is_binary(thread_id) and thread_id != "" ->
+        {:ok, thread_id}
 
       _ ->
-        if goal_opt?(opts) and CodexConfig.goals_enabled?(section),
-          do: Session.resolve(workspace, opts),
-          else: :error
+        case Keyword.get(opts, :conversation_ref) do
+          %ConversationRef{provider: "codex", conversation_id: conversation_id} ->
+            {:ok, conversation_id}
+
+          _ ->
+            if goal_opt?(opts) and CodexConfig.goals_enabled?(section),
+              do: Session.resolve(workspace, opts),
+              else: :error
+        end
     end
   end
 

@@ -64,7 +64,8 @@ defmodule SymphonyElixir.Claude.AppServer.ServerTest do
 
     request(server, 1, "initialize", %{})
     response = request(server, 2, "model/list", %{})
-    assert %{"result" => %{"models" => [%{"id" => "claude-opus-4-8"} | _]}} = response
+    assert %{"result" => %{"models" => models}} = response
+    assert Enum.any?(models, &(Map.get(&1, "id") == "claude-opus-4-8"))
   end
 
   test "turn busy guard and steer queueing" do

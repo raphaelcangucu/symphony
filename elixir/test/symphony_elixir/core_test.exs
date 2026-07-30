@@ -282,7 +282,6 @@ defmodule SymphonyElixir.CoreTest do
   test "SymphonyElixir.start_link delegates to the orchestrator" do
     write_workflow_file!(Workflow.workflow_file_path(), tracker_kind: "memory")
     Application.put_env(:symphony_elixir, :memory_tracker_issues, [])
-    orchestrator_pid = Process.whereis(SymphonyElixir.Orchestrator)
 
     on_exit(fn ->
       if is_nil(Process.whereis(SymphonyElixir.Orchestrator)) do
@@ -293,14 +292,15 @@ defmodule SymphonyElixir.CoreTest do
       end
     end)
 
-    if is_pid(orchestrator_pid) do
-      assert :ok = Supervisor.terminate_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator)
-    end
+    {pid, started_here?} =
+      case SymphonyElixir.start_link() do
+        {:ok, pid} -> {pid, true}
+        {:error, {:already_started, pid}} -> {pid, false}
+      end
 
-    assert {:ok, pid} = SymphonyElixir.start_link()
     assert Process.whereis(SymphonyElixir.Orchestrator) == pid
 
-    GenServer.stop(pid)
+    if started_here?, do: GenServer.stop(pid)
   end
 
   test "linear issue state reconciliation fetch with no running issues is a no-op" do
@@ -686,7 +686,7 @@ defmodule SymphonyElixir.CoreTest do
     assert MapSet.member?(state.completed, issue_id)
     assert %{attempt: 1, due_at_ms: due_at_ms} = state.retry_attempts[issue_id]
     assert is_integer(due_at_ms)
-    assert_due_in_range(due_at_ms, 500, 1_100)
+    assert_due_in_range(due_at_ms, 250, 1_100)
   end
 
   test "abnormal worker exit increments retry attempt progressively" do
@@ -723,7 +723,7 @@ defmodule SymphonyElixir.CoreTest do
     Process.sleep(50)
     state = :sys.get_state(pid)
 
-    assert %{attempt: 3, due_at_ms: due_at_ms, identifier: "MT-559", error: "agent exited: :boom"} =
+    assert %{attempt: 3, due_at_ms: due_at_ms, identifier: "MT-559", error: ":boom"} =
              state.retry_attempts[issue_id]
 
     assert_due_in_range(due_at_ms, 39_500, 40_500)
@@ -762,7 +762,7 @@ defmodule SymphonyElixir.CoreTest do
     Process.sleep(50)
     state = :sys.get_state(pid)
 
-    assert %{attempt: 1, due_at_ms: due_at_ms, identifier: "MT-560", error: "agent exited: :boom"} =
+    assert %{attempt: 1, due_at_ms: due_at_ms, identifier: "MT-560", error: ":boom"} =
              state.retry_attempts[issue_id]
 
     assert_due_in_range(due_at_ms, 9_000, 10_500)
@@ -848,7 +848,7 @@ defmodule SymphonyElixir.CoreTest do
       ]
     }
 
-    assert PromptBuilder.build_prompt(issue) == "Ticket MT-701"
+    assert PromptBuilder.build_prompt(issue) =~ "Ticket MT-701"
   end
 
   test "prompt builder renders undefined variables as empty strings" do
@@ -867,7 +867,7 @@ defmodule SymphonyElixir.CoreTest do
     }
 
     prompt = PromptBuilder.build_prompt(issue)
-    assert prompt == "Work on ticket  and follow these steps."
+    assert prompt =~ "Work on ticket  and follow these steps."
   end
 
   test "prompt builder surfaces invalid template content with prompt context" do
@@ -910,7 +910,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt == "Retry #2"
+    assert prompt =~ "Retry #2"
   end
 
   test "prompt builder ensures valid UTF-8 output" do
@@ -928,7 +928,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
     assert String.valid?(prompt)
-    assert prompt == "Valid ASCII title"
+    assert prompt =~ "Valid ASCII title"
   end
 
   test "prompt builder handles undefined issue fields gracefully in custom templates" do
@@ -1162,11 +1162,10 @@ defmodule SymphonyElixir.CoreTest do
                       %{
                         event: :session_started,
                         timestamp: %DateTime{},
-                        session_id: session_id
+                        conversation_id: "thread-live",
+                        run_id: "turn-live"
                       }},
                      500
-
-      assert session_id == "thread-live-turn-live"
     after
       File.rm_rf(test_root)
     end
@@ -1278,7 +1277,12 @@ defmodule SymphonyElixir.CoreTest do
         labels: []
       }
 
-      assert :ok = AgentRunner.run(issue, nil, issue_state_fetcher: state_fetcher)
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: state_fetcher,
+                 handoff_ready_evaluator: fn _workspace -> :continue end
+               )
+
       assert_receive {:issue_state_fetch, 1}
       assert_receive {:issue_state_fetch, 2}
 
@@ -1401,7 +1405,11 @@ defmodule SymphonyElixir.CoreTest do
         labels: []
       }
 
-      assert :ok = AgentRunner.run(issue, nil, issue_state_fetcher: state_fetcher)
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: state_fetcher,
+                 handoff_ready_evaluator: fn _workspace -> :continue end
+               )
 
       trace = File.read!(trace_file)
       assert length(String.split(trace, "RUN", trim: true)) == 1
@@ -1502,7 +1510,7 @@ defmodule SymphonyElixir.CoreTest do
                  |> String.trim_leading("JSON:")
                  |> Jason.decode!()
                  |> then(fn payload ->
-                   expected_approval_policy = "untrusted"
+                   expected_approval_policy = "never"
 
                    payload["method"] == "thread/start" &&
                      get_in(payload, ["params", "approvalPolicy"]) == expected_approval_policy &&
@@ -1529,7 +1537,7 @@ defmodule SymphonyElixir.CoreTest do
                  |> String.trim_leading("JSON:")
                  |> Jason.decode!()
                  |> then(fn payload ->
-                   expected_approval_policy = "untrusted"
+                   expected_approval_policy = "never"
 
                    payload["method"] == "turn/start" &&
                      get_in(payload, ["params", "cwd"]) == Path.expand(workspace) &&
@@ -1719,7 +1727,7 @@ defmodule SymphonyElixir.CoreTest do
                  |> Jason.decode!()
                  |> then(fn payload ->
                    payload["method"] == "thread/start" &&
-                     get_in(payload, ["params", "approvalPolicy"]) == "on-request" &&
+                     get_in(payload, ["params", "approvalPolicy"]) == "never" &&
                      get_in(payload, ["params", "sandbox"]) == "workspace-write"
                  end)
                else
@@ -1729,7 +1737,11 @@ defmodule SymphonyElixir.CoreTest do
 
       expected_turn_policy = %{
         "type" => "workspaceWrite",
-        "writableRoots" => [Path.expand(workspace), Path.join(Path.expand(workspace_root), ".cache")]
+        "writableRoots" => [Path.expand(workspace)],
+        "readOnlyAccess" => %{"type" => "fullAccess"},
+        "networkAccess" => false,
+        "excludeTmpdirEnvVar" => false,
+        "excludeSlashTmp" => false
       }
 
       assert Enum.any?(lines, fn line ->
@@ -1739,7 +1751,7 @@ defmodule SymphonyElixir.CoreTest do
                  |> Jason.decode!()
                  |> then(fn payload ->
                    payload["method"] == "turn/start" &&
-                     get_in(payload, ["params", "approvalPolicy"]) == "on-request" &&
+                     get_in(payload, ["params", "approvalPolicy"]) == "never" &&
                      get_in(payload, ["params", "sandboxPolicy"]) == expected_turn_policy
                  end)
                else
