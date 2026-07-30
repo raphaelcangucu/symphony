@@ -196,14 +196,10 @@ describe("IssueRoute", () => {
     expect(push).toHaveBeenCalledWith("/codex/session/43");
   });
 
-  it("opens the active orchestration instead of dispatching a duplicate agent", () => {
+  it("opens an active task execution instead of dispatching a duplicate agent", () => {
     const dispatch = jest.fn();
     jest.mocked(useIssueDetail).mockReturnValue({
       ...issueDetail,
-      issue: {
-        ...issueDetail.issue!,
-        executionPath: "orchestrator",
-      },
       threads: [
         {
           id: 81,
@@ -213,7 +209,7 @@ describe("IssueRoute", () => {
           issueIdentifier: "MOB-7",
           workspacePath: null,
           title: "MOB-7 execution",
-          status: "active",
+          status: "error",
           preview: null,
           updatedAt: "2026-07-29T16:35:00Z",
           agentKind: "codex",
@@ -234,9 +230,6 @@ describe("IssueRoute", () => {
     expect(push).toHaveBeenCalledWith("/codex/session/81");
 
     fireEvent.press(screen.getByRole("tab", { name: "Sessions" }));
-    expect(
-      screen.queryByRole("button", { name: "New task session" }),
-    ).toBeNull();
     fireEvent.press(screen.getByRole("button", { name: "Open session 81" }));
     expect(push).toHaveBeenLastCalledWith("/codex/session/81");
   });

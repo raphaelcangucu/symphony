@@ -184,20 +184,20 @@ export function IssueSummaryTab({
         <PrimaryAction
           disabled={dispatching}
           label={
-            isOrchestrator && dispatching
+            dispatching
               ? "Starting execution…"
-              : isOrchestrator && activeExecution
+              : activeExecution
                 ? "Open execution"
                 : isOrchestrator
                   ? "Run orchestration"
                   : "Open session"
           }
           onPress={
-            isOrchestrator
-              ? activeExecution
-                ? () => onOpenExecution(activeExecution)
-                : onRunOrchestration
-              : onOpenSession
+            activeExecution
+              ? () => onOpenExecution(activeExecution)
+              : isOrchestrator
+                ? onRunOrchestration
+                : onOpenSession
           }
         />
         <SecondaryAction label="Review evidence" onPress={onOpenEvidence} />

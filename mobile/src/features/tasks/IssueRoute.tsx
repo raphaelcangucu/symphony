@@ -78,8 +78,7 @@ function ConnectedIssueRoute({
   const transport = routeTransport ?? selectedTransport;
   const evidence = useTaskEvidence({ transport, projectSlug, identifier });
   const activeExecution = detail.threads.find(
-    (thread) =>
-      thread.scope === "issue_execution" && thread.status === "active",
+    (thread) => thread.scope === "issue_execution",
   );
   const threadRoute = (suffix = "") => {
     if (detail.threadId) {

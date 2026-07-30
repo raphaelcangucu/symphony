@@ -325,6 +325,38 @@ tap_selector() {
   sleep 1
 }
 
+tap_content_desc_containing() {
+  local fragment="$1"
+  local attempts="${2:-45}"
+  local node
+  local bounds
+
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    node="$(
+      (sed 's/></>\n</g' "${UI_DUMP_PATH}" | grep -F 'content-desc="' | grep -F "${fragment}" || true) |
+        head -n 1
+    )"
+    if [[ -n "${node}" ]]; then
+      bounds="$(
+        printf "%s" "${node}" |
+          sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p'
+      )"
+      if [[ "${bounds}" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]]; then
+        read -r x1 y1 x2 y2 <<<"${bounds}"
+        "${ADB}" shell input tap "$(((x1 + x2) / 2))" "$(((y1 + y2) / 2))"
+        trace_step "tap content-desc containing=${fragment}"
+        sleep 1
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+
+  printf "Accessible control containing fragment not found: %s\n" "${fragment}" >&2
+  return 1
+}
+
 tap_accessible() {
   local value="$1"
   dump_ui
@@ -1004,13 +1036,25 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
     "${host_a_orchestrator_issue}"
   wait_for_orchestrator_run "${HOST_A_PORT}" "${host_a_orchestrator_issue}" "${HOST_A_PROJECT}"
   if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
-    launch_orchestrator_runs
+    # Re-open the task through the App after the real Host has started its
+    # execution. Its primary action must become "Open execution"; it must not
+    # dispatch a second agent or surface the old already-running error.
+    launch_host_tasks_list
+    wait_for_text "${HOST_A_NAME}: encrypted mobile control"
+    tap_content_desc_containing "Dev10x task · ${host_a_orchestrator_issue} ·"
+    tap_accessible "Refresh details"
+    wait_for_ui_contains "Open execution"
+    assert_ui_absent "Task action failed"
+    tap_accessible "Open execution"
+    trace_step "open the active orchestration from its task without a duplicate dispatch"
   else
     tap_accessible "Orchestrator runs"
   fi
-  wait_for_text "Orchestrator runs"
-  wait_for_text "${host_a_orchestrator_issue}"
-  tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
+  if [[ "${ORCHESTRATOR_STEER_ONLY}" != "1" ]]; then
+    wait_for_text "Orchestrator runs"
+    wait_for_text "${host_a_orchestrator_issue}"
+    tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
+  fi
   wait_for_ui_contains "#${orchestrator_session_id}"
   wait_for_selector "content-desc" "Message"
   wait_for_selector "content-desc" "Connection status: Live" 180
