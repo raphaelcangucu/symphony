@@ -1286,7 +1286,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   test "join assistant:issue:<project>:<identifier> creates and loads an issue thread", %{socket: socket} do
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
-    assert %{thread_id: thread_id} = payload
+    assert %{thread_id: thread_id, issue_identifier: "MAC-1"} = payload
     refute Map.has_key?(payload, :messages)
     assert_push("history_loaded", %{messages: []})
     assert {:ok, thread} = History.get_thread(thread_id)

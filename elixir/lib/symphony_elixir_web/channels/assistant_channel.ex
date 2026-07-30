@@ -2315,7 +2315,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       resolved_effort: History.resolved_effort(thread),
       skill_profile: History.thread_skill_profile(thread),
       scope: thread.scope,
-      project_slug: thread.project_slug
+      project_slug: thread.project_slug,
+      # Keep the durable task association when a session is reopened by id.
+      # Mobile uses it for the task chip and to resolve linked evidence.
+      issue_identifier: thread.issue_identifier
     }
   end
 

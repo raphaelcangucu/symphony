@@ -95,6 +95,7 @@ export type AssistantChatScreenProps = {
   onOpenTerminal(): void;
   onOpenChanges?: (() => void) | undefined;
   sourceChanges?: SourceChangeSummary | null | undefined;
+  onOpenEvidenceLink?: ((href: string) => boolean) | undefined;
   taskLinks?:
     | {
         identifier: string;
@@ -186,6 +187,7 @@ function AssistantChatContent({
   onStartDictation,
   onOpenTerminal,
   onOpenChanges,
+  onOpenEvidenceLink,
   sourceChanges,
   taskLinks,
   onKillTool,
@@ -280,9 +282,12 @@ function AssistantChatContent({
               accessibilityLabel={`Open ${taskLinks.identifier} task`}
               accessibilityRole="button"
               onPress={taskLinks.onOpenTask}
-              style={[styles.iconButton, { backgroundColor: colors.bgPressed }]}
+              style={[styles.taskLink, { backgroundColor: colors.bgPressed }]}
             >
               <ListChecks color={colors.textPrimary} size={20} />
+              <Text numberOfLines={1} style={[styles.taskLinkText, { color: colors.textPrimary }]}>
+                {taskLinks.identifier}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -296,7 +301,11 @@ function AssistantChatContent({
             testID="session-message-list"
           >
             {({ message }) => (
-              <ChatMessage onKillTool={onKillTool} role={message.role} />
+              <ChatMessage
+                onKillTool={onKillTool}
+                onOpenEvidenceLink={onOpenEvidenceLink}
+                role={message.role}
+              />
             )}
           </ThreadPrimitive.Messages>
         </ThreadPrimitive.Root>
@@ -413,9 +422,11 @@ function QueuedMessageDock({
 
 function ChatMessage({
   onKillTool,
+  onOpenEvidenceLink,
   role,
 }: {
   onKillTool(toolCallId: string): Promise<void>;
+  onOpenEvidenceLink?: (href: string) => boolean;
   role: "assistant" | "user" | "system";
 }) {
   const { colors } = useAppTheme();
@@ -451,7 +462,12 @@ function ChatMessage({
             ) : system ? (
               <ActivityDisclosure icon={activityIcon(text)} text={text} />
             ) : (
-              <Markdown style={markdownStyles(colors)}>{text}</Markdown>
+              <Markdown
+                onLinkPress={(href) => !onOpenEvidenceLink?.(href)}
+                style={markdownStyles(colors)}
+              >
+                {text}
+              </Markdown>
             ),
           tools: {
             Fallback: (part) => (
@@ -2506,6 +2522,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44,
   },
+  taskLink: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    height: 42,
+    justifyContent: "center",
+    maxWidth: 112,
+    paddingHorizontal: spacing.sm,
+  },
+  taskLinkText: { fontSize: 13, fontWeight: "800" },
   changeCount: {
     fontSize: 11,
     fontWeight: "700",

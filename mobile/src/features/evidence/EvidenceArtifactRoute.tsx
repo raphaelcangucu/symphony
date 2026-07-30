@@ -4,6 +4,7 @@ import { Share } from "react-native";
 
 import { useHostTransport } from "@/api/HostTransportContext";
 import { StateView } from "@/components/StateView";
+import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 
 import { EvidenceArtifactScreen, type EvidenceArtifactDownload } from "./EvidenceArtifactScreen";
 import type { EvidenceArtifact } from "./evidence-contract";
@@ -24,9 +25,13 @@ export function EvidenceArtifactRoute() {
     identifier?: string | string[];
     runId?: string | string[];
     artifactPath?: string | string[];
+    hostId?: string | string[];
   }>();
   const router = useRouter();
-  const transport = useHostTransport();
+  const activeTransport = useHostTransport();
+  const hostRuntime = useHostRuntime();
+  const hostId = routeParam(params.hostId);
+  const transport = hostId ? hostRuntime.transport(hostId) : activeTransport;
   const projectSlug = routeParam(params.projectSlug);
   const identifier = routeParam(params.identifier);
   const runId = routeParam(params.runId);

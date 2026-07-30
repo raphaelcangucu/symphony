@@ -45,7 +45,7 @@ const timeline: SessionTimelineState = {
   pendingUserInput: null,
   turnStatus: { status: "running", canResume: false, queuedMessages: [] },
   turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
-  metadata: { projectSlug: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
+  metadata: { projectSlug: null, issueIdentifier: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
   error: null,
 };
 

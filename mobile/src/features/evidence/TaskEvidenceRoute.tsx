@@ -2,6 +2,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useHostTransport, useHostTransportState } from "@/api/HostTransportContext";
 import { orchestratorRunRoute } from "@/features/orchestrator/orchestrator-executions";
+import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
+import { hostChatRoute } from "@/features/sessions/session-navigation";
 
 import type { EvidenceArtifact, EvidenceRecord } from "./evidence-contract";
 import { TaskEvidenceScreen } from "./TaskEvidenceScreen";
@@ -11,10 +13,14 @@ export function TaskEvidenceRoute() {
   const params = useLocalSearchParams<{
     projectSlug?: string | string[];
     identifier?: string | string[];
+    hostId?: string | string[];
   }>();
   const router = useRouter();
-  const transport = useHostTransport();
+  const activeTransport = useHostTransport();
+  const hostRuntime = useHostRuntime();
   const transportState = useHostTransportState();
+  const hostId = routeParam(params.hostId);
+  const transport = hostId ? hostRuntime.transport(hostId) : activeTransport;
   const projectSlug = routeParam(params.projectSlug);
   const identifier = routeParam(params.identifier);
   const evidence = useTaskEvidence({
@@ -34,7 +40,7 @@ export function TaskEvidenceRoute() {
       loading={evidence.loading}
       onBack={() => router.back()}
       onOpenArtifact={(artifact, record) =>
-        openArtifact(router, projectSlug, identifier, artifact, record)
+        openArtifact(router, hostId, projectSlug, identifier, artifact, record)
       }
       onOpenLog={(record) => openLog(router, transport?.hostId, identifier, record)}
       onRefresh={() => {
@@ -48,14 +54,19 @@ export function TaskEvidenceRoute() {
 
 function openArtifact(
   router: ReturnType<typeof useRouter>,
+  hostId: string | null,
   projectSlug: string,
   identifier: string,
   artifact: EvidenceArtifact,
   record: EvidenceRecord,
 ) {
+  const pathname = hostId
+    ? "/h/[hostId]/issue/[projectSlug]/[identifier]/evidence/[runId]"
+    : "/issue/[projectSlug]/[identifier]/evidence/[runId]";
   router.push({
-    pathname: "/codex/issue/[projectSlug]/[identifier]/evidence/[runId]",
+    pathname: pathname as never,
     params: {
+      ...(hostId ? { hostId } : {}),
       projectSlug,
       identifier,
       runId: record.runId,
@@ -72,7 +83,11 @@ function openLog(
 ) {
   const provenance = record.provenance;
   if (provenance?.executionPath === "session" && provenance.threadId) {
-    router.push(`/codex/session/${provenance.threadId}`);
+    router.push(
+      (hostId
+        ? hostChatRoute(hostId, provenance.threadId)
+        : `/session/${provenance.threadId}`) as never,
+    );
     return;
   }
   if (hostId && provenance?.executionSessionId) {

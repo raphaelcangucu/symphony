@@ -574,6 +574,7 @@ function readSessionMetadata(payload: unknown): Partial<AssistantSessionMetadata
   if (!isRecord(payload)) return null;
   return {
     projectSlug: nullableString(payload.project_slug),
+    issueIdentifier: nullableString(payload.issue_identifier),
     agentKind: nullableString(payload.effective_agent),
     requestedModel: nullableString(payload.requested_model),
     requestedEffort: nullableString(payload.requested_effort),

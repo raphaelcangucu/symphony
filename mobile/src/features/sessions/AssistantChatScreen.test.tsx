@@ -40,6 +40,7 @@ const timeline: SessionTimelineState = {
   turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
   metadata: {
     projectSlug: null,
+    issueIdentifier: null,
     agentKind: null,
     requestedModel: null,
     requestedEffort: null,
@@ -412,9 +413,35 @@ describe("AssistantChatScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: "Open VIN-2 task" }));
 
     expect(onOpenTask).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("VIN-2")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open task Evidence" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open task PRs" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Open Changes/ })).toBeNull();
+  });
+
+  it("opens a linked evidence artifact through the task evidence route", () => {
+    const onOpenEvidenceLink = jest.fn(() => true);
+    renderScreen({
+      onOpenEvidenceLink,
+      timeline: {
+        ...timeline,
+        activeTools: [],
+        streamingText: "",
+        messages: [
+          {
+            id: "assistant-evidence",
+            role: "assistant",
+            content: "Fresh capture: [desktop](/tmp/health-desktop.png).",
+            toolCalls: [],
+            insertedAt: null,
+          },
+        ],
+      },
+    });
+
+    fireEvent.press(screen.getByText("desktop"));
+
+    expect(onOpenEvidenceLink).toHaveBeenCalledWith("/tmp/health-desktop.png");
   });
 
   it("opens Changes only when the Host reports source mutations", () => {

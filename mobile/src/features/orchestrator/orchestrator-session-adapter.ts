@@ -128,6 +128,7 @@ export function buildOrchestratorTimeline(
     },
     metadata: {
       projectSlug: provenance?.projectSlug ?? null,
+      issueIdentifier: null,
       agentKind: effectiveAgentKind,
       requestedModel: provenance?.requestedModel ?? null,
       requestedEffort: provenance?.requestedEffort ?? null,

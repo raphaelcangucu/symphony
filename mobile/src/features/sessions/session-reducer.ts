@@ -61,6 +61,7 @@ export type AssistantTurnPreferences = {
 
 export type AssistantSessionMetadata = {
   projectSlug: string | null;
+  issueIdentifier: string | null;
   agentKind: string | null;
   requestedModel: string | null;
   requestedEffort: string | null;
@@ -130,6 +131,7 @@ export function createSessionTimelineState(): SessionTimelineState {
     turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
     metadata: {
       projectSlug: null,
+      issueIdentifier: null,
       agentKind: null,
       requestedModel: null,
       requestedEffort: null,
