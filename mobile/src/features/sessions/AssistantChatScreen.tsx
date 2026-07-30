@@ -217,7 +217,10 @@ function AssistantChatContent({
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // Android edge-to-edge windows do not reliably shrink a nested chat
+        // tree on their own. Use an explicit height adjustment so the
+        // composer always remains above the IME instead of being covered by it.
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.safeArea}
       >
         <View

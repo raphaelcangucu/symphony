@@ -812,6 +812,20 @@ launch_host_tasks_list() {
   trace_step "cold-start selected-host task list with persisted pairing"
 }
 
+launch_orchestrator_runs() {
+  # Do not depend on the back-stack of a workspace or chat route here. A real
+  # execution can be dispatched while Android is showing any session surface;
+  # the host-level runs route is the durable owner of those executions.
+  local route="symphony://h/${host_a_id}/runs"
+  "${ADB}" shell am force-stop "${APP_PACKAGE}"
+  sleep 2
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${route}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  trace_step "cold-start selected-host orchestrator runs with persisted pairing"
+}
+
 if [[ ! -f "${APK_PATH}" ]]; then
   printf "APK not found: %s\n" "${APK_PATH}" >&2
   exit 1
@@ -906,9 +920,6 @@ trace_step "assert rich chat opens by default with real persisted host history"
 if [[ "${TASK_ACTIONS_ONLY}" == "0" ]]; then
 if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
   trace_step "skip unrelated chat, terminal and task-detail checks for focused Android orchestrator steer E2E"
-  tap_accessible "Go back"
-  wait_for_text "${HOST_A_NAME} — Direct RPC session"
-  trace_step "return from direct chat to the workspace panel before opening the orchestrator execution"
 else
 assert_task_session_evidence
 tap_accessible "Go back"
@@ -992,7 +1003,11 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
     "${HOST_A_PROJECT}" \
     "${host_a_orchestrator_issue}"
   wait_for_orchestrator_run "${HOST_A_PORT}" "${host_a_orchestrator_issue}" "${HOST_A_PROJECT}"
-  tap_accessible "Orchestrator runs"
+  if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
+    launch_orchestrator_runs
+  else
+    tap_accessible "Orchestrator runs"
+  fi
   wait_for_text "Orchestrator runs"
   wait_for_text "${host_a_orchestrator_issue}"
   tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
@@ -1018,10 +1033,20 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   test -s "${ORCHESTRATOR_STEER_SCREENSHOT_PATH}"
   trace_step "assert Android composer steer stayed in execution ${orchestrator_session_id} and was answered by the real orchestrator"
 
-  tap_accessible "Go back"
-  wait_for_text "Orchestrator runs"
-  tap_accessible "Go back"
-  wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  if [[ "${ORCHESTRATOR_STEER_ONLY}" == "1" ]]; then
+    # The run opens an issue-associated chat. Its back target is that issue,
+    # rather than the host dashboard, so return through a stable host route
+    # before the common final Back-to-hosts assertion.
+    launch_host_tasks_list
+    wait_for_text "${HOST_A_NAME}: encrypted mobile control"
+    tap_accessible "Back to worktrees"
+    wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  else
+    tap_accessible "Go back"
+    wait_for_text "Orchestrator runs"
+    tap_accessible "Go back"
+    wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  fi
 else
   trace_step "skip provider-authenticated orchestrator turn in credentialless CI"
 fi
