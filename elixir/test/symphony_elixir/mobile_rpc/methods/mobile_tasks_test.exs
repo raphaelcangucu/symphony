@@ -51,6 +51,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.MobileTasksTest do
              "updatedAt" => "2026-07-25T21:00:00Z",
              "agent" => "codex",
              "agentState" => "live",
+             "executionSessionId" => 73,
              "blockedBy" => ["DEV-99"],
              "subtaskCount" => 2,
              "pendingApproval" => true,
@@ -113,6 +114,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.MobileTasksTest do
                %{
                  "identifier" => "DEV-101",
                  "hostId" => "host-a",
+                 "executionSessionId" => 73,
                  "blockedBy" => ["DEV-99"],
                  "subtaskCount" => 2,
                  "pendingApproval" => true

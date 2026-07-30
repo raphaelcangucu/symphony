@@ -14,6 +14,7 @@ export type Dev10xWorkItem = {
   updatedAt: string
   agent?: string | null
   agentState: string
+  executionSessionId?: number | null
   blockedBy: string[]
   subtaskCount: number
   pendingApproval: boolean
@@ -85,6 +86,9 @@ function isDev10xWorkItemsEnvelope(
       typeof record.status === 'string' &&
       typeof record.updatedAt === 'string' &&
       typeof record.agentState === 'string' &&
+      (record.executionSessionId === undefined ||
+        record.executionSessionId === null ||
+        (typeof record.executionSessionId === 'number' && Number.isInteger(record.executionSessionId))) &&
       Array.isArray(record.blockedBy) &&
       typeof record.subtaskCount === 'number' &&
       typeof record.pendingApproval === 'boolean' &&

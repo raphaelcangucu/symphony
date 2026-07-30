@@ -24,6 +24,7 @@ describe('fetchDev10xWorkItems', () => {
                 updatedAt: '2026-07-25T21:00:00Z',
                 agent: 'codex',
                 agentState: 'live',
+                executionSessionId: 73,
                 blockedBy: ['DEV-99'],
                 subtaskCount: 2,
                 pendingApproval: true,
@@ -42,6 +43,7 @@ describe('fetchDev10xWorkItems', () => {
           identifier: 'DEV-101',
           projectSlug: 'dev10x',
           agent: 'codex',
+          executionSessionId: 73,
           blockedBy: ['DEV-99'],
           pendingApproval: true
         })

@@ -2949,6 +2949,7 @@ defmodule SymphonyElixir.Orchestrator do
           agent_goal: Map.get(metadata, :agent_goal),
           goal: Map.get(metadata, :goal),
           session_id: metadata.session_id,
+          execution_session_id: Map.get(metadata, :execution_session_id),
           codex_app_server_pid: metadata.codex_app_server_pid,
           agent_input_tokens: metadata.agent_input_tokens,
           agent_output_tokens: metadata.agent_output_tokens,

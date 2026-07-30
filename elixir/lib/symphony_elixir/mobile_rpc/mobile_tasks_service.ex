@@ -126,6 +126,7 @@ defmodule SymphonyElixir.MobileRpc.MobileTasksService do
       "updatedAt" => value(issue, "updated_at") || value(issue, "inserted_at") || "",
       "agent" => value(issue, "agent_kind"),
       "agentState" => value(agent_state, "status") || "idle",
+      "executionSessionId" => value(agent_state, "execution_session_id") || value(agent_state, "session_id"),
       "blockedBy" => blocker_identifiers(value(issue, "blocked_by")),
       "subtaskCount" => subtask_count(value(issue, "sub_issue_summary")),
       "pendingApproval" => attention_event?(last_event, "approval"),

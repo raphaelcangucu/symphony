@@ -13136,6 +13136,25 @@ export default function MobileTasksScreen() {
                           ? 'Running'
                           : actionItem.source.agentState}
                       </Text>
+                      {Number.isInteger(actionItem.source.executionSessionId) ? (
+                        <Pressable
+                          accessibilityLabel="Open execution"
+                          accessibilityRole="button"
+                          style={styles.inlineSaveButton}
+                          onPress={() => {
+                            const executionSessionId = actionItem.source.executionSessionId
+                            if (!Number.isInteger(executionSessionId)) return
+                            setActionItem(null)
+                            router.push(
+                              `/h/${hostId}/chat/${executionSessionId}?name=${encodeURIComponent(
+                                `${actionItem.source.identifier} execution`
+                              )}`
+                            )
+                          }}
+                        >
+                          <Text style={styles.inlineSaveText}>Open execution</Text>
+                        </Pressable>
+                      ) : null}
                       {actionItem.source.pendingApproval ? (
                         <Text style={styles.detailError}>Approval needed</Text>
                       ) : null}
