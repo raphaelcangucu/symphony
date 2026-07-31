@@ -20,9 +20,9 @@ defmodule SymphonyElixir.Recents.Broadcaster do
     GenServer.start_link(__MODULE__, :ok, name: name)
   end
 
-  @spec notify() :: :ok
-  def notify do
-    case Process.whereis(__MODULE__) do
+  @spec notify(GenServer.server()) :: :ok
+  def notify(server \\ __MODULE__) do
+    case server_pid(server) do
       pid when is_pid(pid) ->
         GenServer.cast(pid, :dirty)
         :ok
@@ -31,6 +31,10 @@ defmodule SymphonyElixir.Recents.Broadcaster do
         :ok
     end
   end
+
+  defp server_pid(server) when is_pid(server), do: server
+  defp server_pid(server) when is_atom(server), do: Process.whereis(server)
+  defp server_pid(_server), do: nil
 
   @impl true
   def init(:ok), do: {:ok, %{flush_timer_ref: nil}}
@@ -50,7 +54,14 @@ defmodule SymphonyElixir.Recents.Broadcaster do
   end
 
   defp broadcast_snapshot do
-    data = Recents.list(limit: @snapshot_limit) |> Enum.map(&TrackerPresenter.recent_item/1)
+    data = snapshot_items() |> Enum.map(&TrackerPresenter.recent_item/1)
     Phoenix.PubSub.broadcast(@pubsub, @topic, {:recents_event, @snapshot_event, %{"data" => data}})
+  end
+
+  defp snapshot_items do
+    case Application.get_env(:symphony_elixir, :recents_snapshot_items_fun) do
+      snapshot_fun when is_function(snapshot_fun, 0) -> snapshot_fun.()
+      _ -> Recents.list(limit: @snapshot_limit)
+    end
   end
 end

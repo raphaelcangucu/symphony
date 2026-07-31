@@ -5,7 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.Assistant.Thread
+  alias SymphonyElixir.{Assistant.Thread, HotpathCache}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -16,48 +16,57 @@ defmodule SymphonyElixirWeb.Tracker.ProjectControllerTest do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+    Repo.delete_all(Thread)
+    HotpathCache.invalidate_all()
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
 
-    {:ok, _project} = Context.ensure_project(%{name: "Activity", slug: "activity"})
+    project_slug = "activity-#{System.unique_integer([:positive])}"
+    {:ok, _project} = Context.ensure_project(%{name: "Activity", slug: project_slug})
 
     on_exit(fn -> restore_env(@token_env, previous_token) end)
 
-    {:ok, conn: authorize()}
+    {:ok, conn: authorize(), project_slug: project_slug}
   end
 
-  test "GET /projects includes last_activity_at from threads and issues", %{conn: conn} do
+  test "GET /projects includes last_activity_at from threads and issues", %{
+    conn: conn,
+    project_slug: project_slug
+  } do
     thread_at = ~U[2026-07-10 12:00:00.000000Z]
     issue_at = ~U[2026-07-11 15:30:00.000000Z]
 
-    insert_thread!("Thread session", thread_at)
-    {:ok, issue} = Context.create_issue("activity", %{title: "Board issue"})
+    insert_thread!(project_slug, "Thread session", thread_at)
+    {:ok, issue} = Context.create_issue(project_slug, %{title: "Board issue"})
     {1, _} = Repo.update_all(from(issue in SymphonyElixir.LocalTracker.IssueRecord, where: issue.id == ^issue.id), set: [updated_at: issue_at])
 
     conn = get(conn, "/api/tracker/v1/projects")
     body = json_response(conn, 200)
 
-    assert %{"data" => [project]} = body
-    assert project["slug"] == "activity"
+    project = Enum.find(body["data"], &(&1["slug"] == project_slug))
+    assert project
     assert project["last_activity_at"] == "2026-07-11T15:30:00Z"
   end
 
-  test "GET /projects returns null last_activity_at when project has no sessions or issues", %{conn: conn} do
+  test "GET /projects returns null last_activity_at when project has no sessions or issues", %{
+    conn: conn,
+    project_slug: project_slug
+  } do
     conn = get(conn, "/api/tracker/v1/projects")
     body = json_response(conn, 200)
 
-    assert %{"data" => [project]} = body
-    assert project["slug"] == "activity"
+    project = Enum.find(body["data"], &(&1["slug"] == project_slug))
+    assert project
     assert is_nil(project["last_activity_at"])
   end
 
-  defp insert_thread!(title, updated_at) do
+  defp insert_thread!(project_slug, title, updated_at) do
     {:ok, thread} =
       %Thread{}
       |> Thread.changeset(%{
         scope: "project_session",
-        project_slug: "activity",
+        project_slug: project_slug,
         title: title,
         workspace_path: "/tmp/#{String.downcase(String.replace(title, " ", "-"))}",
         status: "active",

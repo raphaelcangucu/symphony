@@ -135,6 +135,7 @@ defmodule SymphonyElixir.TestSupport do
   reset used by setups to avoid order-dependent pollution from the shared DB.
   """
   def truncate_tracker!(repo \\ SymphonyElixir.Repo) do
+    ensure_tracker_repo_started!(repo)
     guard_not_real_database!(repo)
 
     {:ok, :ok} =
@@ -162,6 +163,32 @@ defmodule SymphonyElixir.TestSupport do
 
     :ok
   end
+
+  # Some legacy test setups still call `Ecto.Migrator.with_repo/2` immediately
+  # before this helper. When the supervised Repo was temporarily unavailable,
+  # `with_repo/2` starts its own Repo process and stops it after migrating. Do
+  # not let that lifecycle leak into the shared test database: the truncation
+  # helper always uses the Repo owned by SharedSupervisor.
+  defp ensure_tracker_repo_started!(SymphonyElixir.Repo) do
+    if is_nil(Process.whereis(SymphonyElixir.Repo)) do
+      {:ok, _started} = Application.ensure_all_started(:symphony_elixir)
+
+      case Process.whereis(SymphonyElixir.Repo) do
+        pid when is_pid(pid) ->
+          :ok
+
+        nil ->
+          case Supervisor.restart_child(SymphonyElixir.SharedSupervisor, SymphonyElixir.Repo) do
+            {:ok, _pid} -> :ok
+            {:error, {:already_started, _pid}} -> :ok
+          end
+      end
+    end
+
+    :ok
+  end
+
+  defp ensure_tracker_repo_started!(_repo), do: :ok
 
   # `truncate_tracker!/1` runs a destructive `DELETE FROM` across every table and
   # is meant ONLY for the pinned test database. Refuse to run when the target is

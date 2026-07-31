@@ -340,9 +340,22 @@ defmodule SymphonyElixir.WorkspaceSkills do
   end
 
   defp same_target?(path, existing_target, target) do
-    existing_target
-    |> Path.expand(Path.dirname(path))
-    |> Kernel.==(Path.expand(target))
+    resolved_existing_target = Path.expand(existing_target, Path.dirname(path))
+    resolved_target = Path.expand(target)
+
+    resolved_existing_target == resolved_target or
+      same_filesystem_entry?(resolved_existing_target, resolved_target)
+  end
+
+  defp same_filesystem_entry?(left, right) do
+    case {File.stat(left), File.stat(right)} do
+      {{:ok, left_stat}, {:ok, right_stat}} ->
+        {left_stat.major_device, left_stat.minor_device, left_stat.inode} ==
+          {right_stat.major_device, right_stat.minor_device, right_stat.inode}
+
+      _other ->
+        false
+    end
   end
 
   defp mirror_root(workspace), do: Path.join([workspace, ".symphony", "skills"])

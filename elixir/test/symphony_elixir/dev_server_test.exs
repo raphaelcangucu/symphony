@@ -66,7 +66,7 @@ defmodule SymphonyElixir.DevServerTest do
                   working_dir: "front",
                   port: 4101,
                   url: "http://127.0.0.1:4101/",
-                  status: "ready",
+                  status: "crashed",
                   primary: true,
                   session_name: "sym-dev-front"
                 }

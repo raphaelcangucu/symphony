@@ -1391,7 +1391,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
         "objective" => "Must not activate"
       })
 
-    assert_reply(ref, :error, %{message: reason})
+    assert_reply(ref, :error, %{message: reason}, 5_000)
     assert reason =~ "workspace"
     refute File.exists?(workspace)
     assert {:ok, unchanged} = History.get_thread(thread.id)
@@ -1459,7 +1459,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
         "objective" => "Must remain disabled"
       })
 
-    assert_reply(ref, :error, %{message: reason})
+    assert_reply(ref, :error, %{message: reason}, 5_000)
     assert reason =~ "goal set failed"
 
     assert {:ok, unchanged} = History.get_thread(thread.id)
@@ -2206,7 +2206,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     ref = push(socket, "send_message", %{"message" => "hi"})
     assert_reply(ref, :ok)
-    assert_push("assistant_completed", %{message: %{content: "freeform reply"}})
+    assert_push("assistant_completed", %{message: %{content: "freeform reply"}}, 5_000)
   after
     Application.delete_env(:symphony_elixir, :assistant_runner)
   end

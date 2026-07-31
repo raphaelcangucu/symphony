@@ -73,8 +73,16 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   defp resolve_workspace(identifier) do
     case issue_context(identifier) do
       %{workspace_path: path} when is_binary(path) and path != "" -> Path.expand(path)
-      _ -> Path.expand(Workspace.path_for_issue(identifier))
+      context -> Path.expand(Workspace.path_for_issue(workspace_issue_ref(identifier, context)))
     end
+  end
+
+  defp workspace_issue_ref(identifier, %{project_slug: slug}) when is_binary(slug) and slug != "" do
+    %{identifier: identifier, project_slug: slug}
+  end
+
+  defp workspace_issue_ref(identifier, _context) do
+    %{identifier: identifier, project_slug: Context.find_project_slug(identifier)}
   end
 
   defp resolve_document_workspace(identifier) do

@@ -157,6 +157,9 @@ defmodule SymphonyElixir.SessionLog do
   def tail("cursor", path, opts), do: tail_with_events(CursorLog.tail(path, opts), opts)
   def tail("opencode", path, opts), do: tail_with_events(OpenCodeLog.tail(path, opts), opts)
   def tail("codex", path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
+  # Symphony-owned per-session transcripts are JSONL as well. Reuse the
+  # permissive JSONL reader so a session resolved from SessionStore is tail-able.
+  def tail("symphony", path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
   def tail(_agent_kind, _path, _opts), do: {:error, :unsupported_agent_kind}
 
   @spec read_from(String.t(), Path.t(), non_neg_integer(), keyword()) ::
@@ -173,6 +176,9 @@ defmodule SymphonyElixir.SessionLog do
     do: read_from_with_events(OpenCodeLog.read_from(path, offset), offset, opts)
 
   def read_from("codex", path, offset, opts),
+    do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
+
+  def read_from("symphony", path, offset, opts),
     do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
 
   def read_from(_agent_kind, _path, _offset, _opts), do: {:error, :unsupported_agent_kind}

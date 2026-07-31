@@ -87,6 +87,15 @@ defmodule SymphonyElixir.KnowledgeBase.GitTest do
     assert {:ok, ""} = Git.status_porcelain(wt)
   end
 
+  test "commit uses the default identity when optional values are nil", %{checkout: checkout} do
+    {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
+    File.write!(Path.join(wt, "identity.md"), "# identity\n")
+
+    assert :ok = Git.add(wt, ["identity.md"])
+    assert {:ok, sha} = Git.commit(wt, "docs(kb): use defaults", name: nil, email: nil)
+    assert is_binary(sha) and byte_size(sha) >= 7
+  end
+
   test "push sends the branch to a bare origin", %{checkout: checkout, base: base} do
     origin = Path.join(base, "origin.git")
     sh(File.cwd!(), ["init", "--bare", "-q", origin])

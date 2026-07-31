@@ -93,30 +93,16 @@ defmodule SymphonyElixir.Workspace.Provision do
   defmodule AtomicMover do
     @moduledoc false
 
-    @move_arguments ["--no-clobber", "--no-target-directory"]
+    @gnu_move_arguments ["--no-clobber", "--no-target-directory"]
+    @bsd_move_arguments ["-n"]
 
     @spec ensure_supported(SymphonyElixir.Workspace.Provision.publish_runner()) ::
             :ok | {:error, term()}
     def ensure_supported(runner) when is_function(runner, 3) do
-      case runner.("mv", ["--version"], stderr_to_stdout: true) do
-        {output, 0} ->
-          trimmed_output = String.trim(output)
-
-          if String.contains?(trimmed_output, "GNU coreutils") do
-            :ok
-          else
-            {:error, {:atomic_move_unsupported, "mv", trimmed_output}}
-          end
-
-        {output, _status} ->
-          {:error, {:atomic_move_unsupported, "mv", String.trim(output)}}
-
-        result ->
-          {:error, {:atomic_move_unsupported, "mv", inspect(result)}}
+      case move_arguments(runner) do
+        {:ok, _arguments} -> :ok
+        {:error, _reason} = error -> error
       end
-    rescue
-      exception ->
-        {:error, {:atomic_move_unsupported, "mv", Exception.message(exception)}}
     end
 
     @spec move(
@@ -126,8 +112,8 @@ defmodule SymphonyElixir.Workspace.Provision do
           ) :: :ok | {:error, term()}
     def move(source, destination, runner)
         when is_binary(source) and is_binary(destination) and is_function(runner, 3) do
-      with :ok <- ensure_supported(runner) do
-        arguments = @move_arguments ++ [source, destination]
+      with {:ok, move_arguments} <- move_arguments(runner) do
+        arguments = move_arguments ++ [source, destination]
 
         case runner.("mv", arguments, stderr_to_stdout: true) do
           {output, 0} -> verify_move_result(source, destination, output)
@@ -141,8 +127,22 @@ defmodule SymphonyElixir.Workspace.Provision do
       case File.lstat(source) do
         {:error, :enoent} ->
           case File.lstat(destination) do
-            {:ok, _stat} -> :ok
-            {:error, reason} -> {:error, {:move_destination_unavailable, destination, reason}}
+            {:ok, _stat} ->
+              nested_source = Path.join(destination, Path.basename(source))
+
+              case File.lstat(nested_source) do
+                {:ok, _stat} ->
+                  {:error, {:move_target_became_directory, destination, nested_source}}
+
+                {:error, :enoent} ->
+                  :ok
+
+                {:error, reason} ->
+                  {:error, {:move_nested_source_unreadable, nested_source, reason}}
+              end
+
+            {:error, reason} ->
+              {:error, {:move_destination_unavailable, destination, reason}}
           end
 
         {:ok, _stat} ->
@@ -151,6 +151,38 @@ defmodule SymphonyElixir.Workspace.Provision do
         {:error, reason} ->
           {:error, {:move_source_unreadable, source, reason}}
       end
+    end
+
+    defp move_arguments(runner) do
+      case runner.("mv", ["--version"], stderr_to_stdout: true) do
+        {output, 0} ->
+          trimmed_output = String.trim(output)
+
+          if String.contains?(trimmed_output, "GNU coreutils") do
+            {:ok, @gnu_move_arguments}
+          else
+            {:error, {:atomic_move_unsupported, "mv", trimmed_output}}
+          end
+
+        {output, status} when is_integer(status) ->
+          trimmed_output = String.trim(output)
+
+          if bsd_mv_version_error?(trimmed_output) do
+            {:ok, @bsd_move_arguments}
+          else
+            {:error, {:atomic_move_unsupported, "mv", trimmed_output}}
+          end
+
+        result ->
+          {:error, {:atomic_move_unsupported, "mv", inspect(result)}}
+      end
+    rescue
+      exception ->
+        {:error, {:atomic_move_unsupported, "mv", Exception.message(exception)}}
+    end
+
+    defp bsd_mv_version_error?(output) do
+      String.contains?(output, "illegal option -- -") and String.contains?(output, "usage: mv")
     end
   end
 
@@ -1044,9 +1076,29 @@ defmodule SymphonyElixir.Workspace.Provision do
 
   defp publish(attempt, workspace, runner) do
     with :ok <- verify_attempt_paths(attempt, true),
-         :ok <- verify_token_file(Path.join(attempt.staging, @readiness_marker), attempt.token),
-         :ok <- AtomicMover.move(attempt.staging, workspace, runner) do
-      finish_publication(attempt, workspace)
+         :ok <- verify_token_file(Path.join(attempt.staging, @readiness_marker), attempt.token) do
+      case AtomicMover.move(attempt.staging, workspace, runner) do
+        :ok ->
+          finish_publication(attempt, workspace)
+
+        {:error, {:move_target_became_directory, ^workspace, nested_staging} = reason} ->
+          remove_misdirected_payload(nested_staging, attempt.token)
+          {:error, reason}
+
+        {:error, _reason} = error ->
+          error
+      end
+    end
+  end
+
+  defp remove_misdirected_payload(path, token) do
+    case verify_token_file(Path.join(path, @ownership_marker), token) do
+      :ok ->
+        File.rm_rf(path)
+        :ok
+
+      {:error, _reason} ->
+        :ok
     end
   end
 

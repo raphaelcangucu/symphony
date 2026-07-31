@@ -23,7 +23,6 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
   @namespace "octocat"
   @base_domain "tracker.cods.dev"
   @preview_host "app-1-back.octocat.tracker.cods.dev"
-  @upstream_port 4173
 
   defmodule EchoUpstream do
     @moduledoc false
@@ -44,7 +43,9 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
 
     sink = start_supervised!(%{id: :body_sink, start: {Agent, :start_link, [fn -> :no_request end]}})
 
-    start_supervised!({Bandit, plug: {EchoUpstream, sink: sink}, scheme: :http, ip: {127, 0, 0, 1}, port: @upstream_port})
+    upstream_port = available_port()
+
+    start_supervised!({Bandit, plug: {EchoUpstream, sink: sink}, scheme: :http, ip: {127, 0, 0, 1}, port: upstream_port})
 
     workflow_root =
       Path.join(System.tmp_dir!(), "symphony-preview-proxy-#{System.unique_integer([:positive])}")
@@ -53,7 +54,7 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
     workflow_file = Path.join(workflow_root, "WORKFLOW.md")
     enable_public_tunnel!(workflow_file)
 
-    PublicRouting.register(@preview_host, @upstream_port)
+    PublicRouting.register(@preview_host, upstream_port)
 
     on_exit(fn ->
       PublicRouting.unregister(@preview_host)
@@ -120,6 +121,19 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
     Workflow.set_workflow_file_path(workflow_file)
     reload_workflow_store!()
     :ok
+  end
+
+  defp available_port do
+    Enum.find_value(4100..4199, fn port ->
+      case :gen_tcp.listen(port, [:binary, ip: {127, 0, 0, 1}, active: false, reuseaddr: true]) do
+        {:ok, socket} ->
+          :ok = :gen_tcp.close(socket)
+          port
+
+        {:error, _reason} ->
+          nil
+      end
+    end) || raise "no available preview test port"
   end
 
   defp ensure_public_routing_started! do

@@ -99,7 +99,7 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
     assert server.stop_command == "'echo' 'runner-stop'"
   end
 
-  test "start_for_issue launches the runner with run_spec beside the nested serve report", %{
+  test "prepare_for_issue builds the runner launch with run_spec beside the nested serve report", %{
     project: project,
     identifier: identifier,
     workspace_path: workspace_path
@@ -121,11 +121,10 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
         }
       ])
 
-    assert {:ok, [pid]} =
-             Manager.start_for_issue(project.slug, identifier, ready_timeout_ms: 0)
+    assert {:ok, %{servers: [server]}} = Manager.prepare_for_issue(project.slug, identifier)
 
     runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
-    launch_command = :sys.get_state(pid).step.command
+    launch_command = server.command
 
     assert {:ok, contract, _record} =
              SymphonyElixir.DevServer.RuntimeContractStore.get_active(

@@ -528,6 +528,12 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert AgentExecution.format_failure("{:turn_failed, #{inspect(message)}}") == message
     end
 
+    test "returns an unparseable inspected failure without recurring" do
+      message = "{:turn_failed, :worker_exit}"
+
+      assert AgentExecution.format_failure(message) == message
+    end
+
     test "strips runtime error stack traces" do
       error =
         "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: " <>

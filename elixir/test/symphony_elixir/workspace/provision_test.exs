@@ -705,13 +705,40 @@ defmodule SymphonyElixir.Workspace.ProvisionTest do
              Provision.ensure(workspace, publish_runner: publish_runner)
 
     assert_received {:publish_command, "mv", args}
-    assert "--no-clobber" in args
-    assert "--no-target-directory" in args
     [source, ^workspace] = Enum.take(args, -2)
+    assert Enum.drop(args, -2) in [["--no-clobber", "--no-target-directory"], ["-n"]]
     assert Path.dirname(Path.dirname(source)) == provisioning_container(workspace)
     assert_received {:publish_filesystems, device, device}
     assert File.read!(foreign_file) == "foreign\n"
     refute File.exists?(Path.join(workspace, @readiness_marker))
+    refute File.exists?(staging)
+  end
+
+  test "BSD no-clobber publication cleans its payload from a final created at the move boundary", %{
+    workspace_root: workspace_root
+  } do
+    workspace = Path.join(workspace_root, "ATOMIC-BSD-NO-CLOBBER")
+    foreign_file = Path.join(workspace, "foreign.txt")
+    parent = self()
+
+    publish_runner =
+      bsd_mv_runner(fn command, args, options ->
+        if List.last(args) == workspace do
+          File.mkdir!(workspace)
+          File.write!(foreign_file, "foreign\n")
+          send(parent, {:publish_command, command, args})
+        end
+
+        System.cmd(command, args, options)
+      end)
+
+    assert {:error, %{stage: :publish, retryable: true, staging: staging}} =
+             Provision.ensure(workspace, publish_runner: publish_runner)
+
+    assert_received {:publish_command, "mv", ["-n", source, ^workspace]}
+    assert Path.dirname(Path.dirname(source)) == provisioning_container(workspace)
+    assert File.read!(foreign_file) == "foreign\n"
+    refute File.exists?(Path.join(workspace, "workspace"))
     refute File.exists?(staging)
   end
 
@@ -1164,6 +1191,16 @@ defmodule SymphonyElixir.Workspace.ProvisionTest do
     fn
       "mv", ["--version"], options ->
         System.cmd("mv", ["--version"], options)
+
+      command, arguments, options ->
+        move_callback.(command, arguments, options)
+    end
+  end
+
+  defp bsd_mv_runner(move_callback) do
+    fn
+      "mv", ["--version"], _options ->
+        {"mv: illegal option -- -\nusage: mv [-f | -i | -n] source target\n", 64}
 
       command, arguments, options ->
         move_callback.(command, arguments, options)

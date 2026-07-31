@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
           AppServer.run(workspace, "Build the feature", issue,
             on_message: fn message ->
               if Map.get(message, :event) == :session_started do
-                send(test_pid, {:turn_started, Map.get(message, :turn_id)})
+                send(test_pid, {:turn_started, Map.get(message, :run_id)})
               end
             end
           )
@@ -42,7 +42,7 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
           AppServer.run(workspace, "Build the feature", issue,
             on_message: fn message ->
               if Map.get(message, :event) == :session_started do
-                send(test_pid, {:turn_started, Map.get(message, :turn_id)})
+                send(test_pid, {:turn_started, Map.get(message, :run_id)})
               end
             end
           )
@@ -74,7 +74,7 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
           AppServer.run(workspace, "Build the feature", issue,
             on_message: fn message ->
               if Map.get(message, :event) == :session_started do
-                send(test_pid, {:turn_started, Map.get(message, :turn_id)})
+                send(test_pid, {:turn_started, Map.get(message, :run_id)})
               end
             end
           )

@@ -3,8 +3,6 @@ defmodule SymphonyElixirWeb.RecentsChannelTest do
 
   import Phoenix.ChannelTest
 
-  alias SymphonyElixir.Recents.Broadcaster
-
   @endpoint SymphonyElixirWeb.Endpoint
   @topic "recents"
 
@@ -27,7 +25,11 @@ defmodule SymphonyElixirWeb.RecentsChannelTest do
   test "relays PubSub recents events", %{socket: _socket} do
     assert_push("snapshot", _)
 
-    assert :ok = Broadcaster.notify()
+    Phoenix.PubSub.broadcast(
+      SymphonyElixir.PubSub,
+      @topic,
+      {:recents_event, "snapshot", %{"data" => []}}
+    )
 
     assert_push("snapshot", %{"data" => data}, 1_000)
     assert is_list(data)

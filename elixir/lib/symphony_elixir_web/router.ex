@@ -48,6 +48,13 @@ defmodule SymphonyElixirWeb.Router do
     get("/health", HealthController, :show)
   end
 
+  scope "/api", SymphonyElixirWeb do
+    pipe_through(:tracker_api)
+
+    post("/mcp", McpController, :handle)
+    get("/mcp", McpController, :stream)
+  end
+
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
     pipe_through(:tracker_sse)
 

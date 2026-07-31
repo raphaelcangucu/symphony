@@ -1,5 +1,7 @@
 defmodule SymphonyElixir.GitHub.ClientRestTest do
-  use ExUnit.Case, async: true
+  # These cases exercise token lookup through the process-global environment.
+  # Running them asynchronously lets another case clear GITHUB_TOKEN mid-test.
+  use ExUnit.Case, async: false
 
   alias SymphonyElixir.GitHub.Client
 

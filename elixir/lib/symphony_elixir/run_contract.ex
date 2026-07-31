@@ -223,9 +223,25 @@ defmodule SymphonyElixir.RunContract do
   # sub-repos are still discovered instead of being masked by a bogus root entry.
   defp git_worktree_root?(dir) do
     case git(dir, ["rev-parse", "--show-toplevel"]) do
-      {:ok, toplevel} -> toplevel != "" and Path.expand(toplevel) == Path.expand(dir)
+      {:ok, toplevel} -> toplevel != "" and same_directory?(toplevel, dir)
       {:error, _reason} -> false
     end
+  end
+
+  defp same_directory?(left, right) do
+    expanded_left = Path.expand(left)
+    expanded_right = Path.expand(right)
+
+    expanded_left == expanded_right or
+      case {File.stat(expanded_left), File.stat(expanded_right)} do
+        {{:ok, left_stat}, {:ok, right_stat}} ->
+          left_stat.type == :directory and right_stat.type == :directory and
+            {left_stat.major_device, left_stat.minor_device, left_stat.inode} ==
+              {right_stat.major_device, right_stat.minor_device, right_stat.inode}
+
+        _other ->
+          false
+      end
   end
 
   defp inspect_repo(path, default_branches) do
