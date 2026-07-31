@@ -114,4 +114,28 @@ describe("evidence contract", () => {
       }),
     ]);
   });
+
+  it("puts the newest successful retry ahead of an older failed record", () => {
+    const records = normalizeEvidenceRecords({
+      records: [
+        {
+          run_id: "run-older",
+          status: "failed",
+          inserted_at: "2026-07-30T10:00:00Z",
+          manifest: { issue: "DEV-2", runs: [] },
+        },
+        {
+          run_id: "run-newer",
+          status: "passed",
+          inserted_at: "2026-07-30T10:05:00Z",
+          manifest: { issue: "DEV-2", runs: [] },
+        },
+      ],
+    });
+
+    expect(records.map((record) => `${record.runId}:${record.status}`)).toEqual([
+      "run-newer:passed",
+      "run-older:failed",
+    ]);
+  });
 });

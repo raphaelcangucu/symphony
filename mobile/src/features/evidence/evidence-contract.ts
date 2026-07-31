@@ -57,10 +57,29 @@ export function normalizeEvidenceRecords(payload: unknown): EvidenceRecord[] {
       ? payload.records
       : [];
 
-  return rows.flatMap((row) => {
-    const record = normalizeEvidenceRecord(row);
-    return record ? [record] : [];
-  });
+  return rows
+    .flatMap((row) => {
+      const record = normalizeEvidenceRecord(row);
+      return record ? [record] : [];
+    })
+    .sort(compareNewestEvidenceFirst);
+}
+
+/**
+ * Evidence can arrive from an encrypted RPC cache as well as the live Host.
+ * Keep the newest record first in both cases: task summaries intentionally use
+ * the first record as the current execution, never the oldest failed attempt.
+ */
+function compareNewestEvidenceFirst(left: EvidenceRecord, right: EvidenceRecord): number {
+  const rightTime = evidenceTimestamp(right);
+  const leftTime = evidenceTimestamp(left);
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  return right.runId.localeCompare(left.runId);
+}
+
+function evidenceTimestamp(record: EvidenceRecord): number {
+  const value = record.insertedAt ? Date.parse(record.insertedAt) : Number.NaN;
+  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
 function normalizeEvidenceRecord(value: unknown): EvidenceRecord | null {
