@@ -35,4 +35,6 @@ O Playwright não chegou a iniciar; portanto não há screenshot ou vídeo deskt
 
 ## Evidência e próxima ação
 
-Os assets Android e o manifesto desta célula estão em `.symphony/evidence/artifacts/cell-02-codex-terra-orchestrator-android/` e serão publicados no Gist específico da célula. A célula fica pausada para revisão; não avanço para Claude/Cursor até o ambiente permitir o preview real e a célula ser reexecutada com screenshots desktop/mobile verdadeiros.
+Os assets Android e o manifesto desta célula estão em `.symphony/evidence/artifacts/cell-02-codex-terra-orchestrator-android/` e no [Gist específico da célula](https://gist.github.com/raphaelcangucu/266e892faf5e908cfd83969632f60a6f). A célula fica pausada para revisão; não avanço para Claude/Cursor até o ambiente permitir o preview real e a célula ser reexecutada com screenshots desktop/mobile verdadeiros.
+
+O teste focado do componente no checkout também não foi considerado aprovação: o runner atual falhou ao transformar o arquivo com `SyntaxError: Unexpected token 'typeof'`, separado do bloqueio E2E do Host.
