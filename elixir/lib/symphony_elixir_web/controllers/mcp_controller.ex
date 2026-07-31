@@ -12,6 +12,7 @@ defmodule SymphonyElixirWeb.McpController do
 
   import Plug.Conn
 
+  alias Plug.Conn
   alias SymphonyElixir.Mcp.Tools
 
   @protocol_version "2025-06-18"

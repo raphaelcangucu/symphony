@@ -158,7 +158,10 @@ defmodule SymphonyElixir.MixProject do
       {:nimble_options, "~> 1.1"},
       {:ex_nudge, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+      # Hex 1.4.7 predates OTP 28's :exact_compare warning and crashes while
+      # formatting it. Pin the upstream compatibility commit until a release
+      # containing it is published.
+      {:dialyxir, github: "jeremyjh/dialyxir", ref: "3553678f4d69281ac6db61034bcf35bcb30cfd78", only: [:dev], runtime: false}
     ]
   end
 
