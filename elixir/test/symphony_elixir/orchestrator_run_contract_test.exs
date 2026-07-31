@@ -130,7 +130,7 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     assert body =~ "| e2e | frontend | `npx playwright test` | passed | - |"
 
     assert body =~
-             "![home.png](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/screens/home.png)"
+             "![home](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/screens/home.png)"
   end
 
   test "evidence_comment_body escapes markdown-sensitive screenshot names and encodes artifact URLs" do
@@ -161,6 +161,6 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     body = Orchestrator.evidence_comment_body(record, issue, "http://localhost:4000")
 
     assert body =~
-             "![Symphony Preview \\(failed\\).png](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/cypress-screenshots/Symphony%20Preview%20(failed).png)"
+             "![Symphony Preview \\(failed\\)](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/cypress-screenshots/Symphony%20Preview%20(failed).png)"
   end
 end

@@ -133,18 +133,15 @@ defmodule SymphonyElixir.AppServerTest do
 
       File.write!(codex_binary, """
       #!/bin/sh
-      count=0
-      while IFS= read -r _line; do
-        count=$((count + 1))
-
-        case "$count" in
-          1)
+      while IFS= read -r line; do
+        case "$line" in
+          *'"method":"initialize"'*)
             printf '%s\\n' '{"id":1,"result":{}}'
             ;;
-          2)
+          *'"method":"thread/start"'*)
             printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-89"}}}'
             ;;
-          3)
+          *'"method":"turn/start"'*)
             printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-89"}}}'
             printf '%s\\n' '{"id":99,"method":"item/commandExecution/requestApproval","params":{"command":"gh pr view","cwd":"/tmp","reason":"need approval"}}'
             ;;
@@ -173,7 +170,7 @@ defmodule SymphonyElixir.AppServerTest do
       }
 
       assert {:error, {:approval_required, payload}} =
-               AppServer.run(workspace, "Handle approval request", issue)
+               AppServer.run(workspace, "Handle approval request", issue, codex_config: %{"approval_policy" => "untrusted"})
 
       assert payload["method"] == "item/commandExecution/requestApproval"
     after

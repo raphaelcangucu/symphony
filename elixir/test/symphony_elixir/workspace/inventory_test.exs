@@ -144,9 +144,11 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     assert {:ok, scan} = Inventory.scan_stream("invproj", emit, executions: [], size_fun: size_fun())
     emitted = Agent.get(events, &Enum.reverse/1)
 
-    assert length(scan.workspaces) == 1
+    assert length(scan.workspaces) == 2
     assert {:entry, %{path: ^active_ws}} = Enum.at(emitted, 0)
-    assert {:totals, %{count: 1}} = List.last(emitted)
+    assert {:entry, %{path: project_path, kind: :project}} = Enum.at(emitted, 1)
+    assert project_path == Path.expand(ctx.segment_root)
+    assert {:totals, %{count: 2}} = List.last(emitted)
   end
 
   test "scan omits a workspace whose probe exceeds the per-scan deadline", ctx do

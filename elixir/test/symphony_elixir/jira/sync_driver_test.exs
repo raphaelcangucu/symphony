@@ -99,7 +99,7 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
 
   test "push issue/create delegates to create_issue", %{project: project} do
     entry = %OutboxEntry{entity_type: "issue", operation: "create", payload: %{"title" => "new"}}
-    assert {:ok, "10010"} = SyncDriver.push(project, entry)
+    assert {:ok, %{remote_id: "10010", identifier: "ABC-99", url: nil}} = SyncDriver.push(project, entry)
   end
 
   test "push issue/update delegates to update_issue", %{project: project} do

@@ -206,9 +206,26 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   @spec queue_clear(Path.t(), role(), integer() | nil) :: :ok | {:error, term()}
   def queue_clear(workspace, role, assistant_thread_id) when is_binary(workspace) do
+    case read_unlocked(workspace, role, assistant_thread_id) do
+      {:ok, %{"objective" => objective, "revision" => revision}} when is_binary(objective) and objective != "" ->
+        queue_clear_if_current(workspace, role, assistant_thread_id, revision)
+
+      {:ok, _goal} ->
+        :ok
+
+      :error ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp queue_clear_if_current(workspace, role, assistant_thread_id, expected_revision) do
     locked(workspace, role, assistant_thread_id, fn ->
       case read_unlocked(workspace, role, assistant_thread_id) do
-        {:ok, %{"objective" => objective} = goal} when is_binary(objective) and objective != "" ->
+        {:ok, %{"revision" => ^expected_revision, "objective" => objective} = goal}
+        when is_binary(objective) and objective != "" ->
           write_goal(workspace, role, stamp(Map.put(goal, "pending_command", "clear")), assistant_thread_id)
 
         {:ok, _goal} ->
@@ -341,7 +358,7 @@ defmodule SymphonyElixir.Claude.GoalStore do
   end
 
   defp locked(workspace, role, assistant_thread_id, operation) when is_function(operation, 0) do
-    :global.trans({{__MODULE__, path(workspace, role, assistant_thread_id)}, self()}, operation)
+    :global.trans({__MODULE__, path(workspace, role, assistant_thread_id)}, operation)
   end
 
   defp stamp(goal) when is_map(goal) do

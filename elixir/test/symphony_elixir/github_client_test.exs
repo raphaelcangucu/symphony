@@ -591,7 +591,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           payload["query"] =~ "SymphonyApiLabelIssues" ->
             assert payload["variables"]["owner"] == "owner"
             assert payload["variables"]["name"] == "repo"
-            assert payload["variables"]["label"] in ["symphony", "symphony:codex", "symphony:claude", "symphony:cursor"]
+
+            assert payload["variables"]["label"] in [
+                     "symphony",
+                     "symphony:codex",
+                     "symphony:claude",
+                     "symphony:cursor",
+                     "symphony:opencode"
+                   ]
 
             nodes =
               if payload["variables"]["label"] == "symphony" do

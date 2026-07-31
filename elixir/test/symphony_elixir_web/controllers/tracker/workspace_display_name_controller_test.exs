@@ -4,6 +4,14 @@ defmodule SymphonyElixirWeb.Tracker.FailingWorkspaceDisplayNameInventory do
   def scan(_project_slug), do: {:error, :inventory_failed}
 end
 
+defmodule SymphonyElixirWeb.Tracker.StaticWorkspaceDisplayNameInventory do
+  @moduledoc false
+
+  def scan(_project_slug) do
+    {:ok, %{workspaces: [%{path: Application.fetch_env!(:symphony_elixir, :test_workspace_display_name_path)}]}}
+  end
+end
+
 defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
   use ExUnit.Case, async: false
 
@@ -48,6 +56,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
     on_exit(fn ->
       restore_env(previous_token)
       restore_inventory_module(previous_inventory_module)
+      Application.delete_env(:symphony_elixir, :test_workspace_display_name_path)
       Application.delete_env(:symphony_elixir, :workflow_file_path)
       File.rm_rf(tmp)
     end)
@@ -61,6 +70,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
   end
 
   test "PUT normalizes a project workspace path and GET returns its alias", %{workspace_path: workspace_path} do
+    use_static_inventory(workspace_path)
     ambiguous_path = Path.join(workspace_path, "nested/..")
 
     conn =
@@ -91,6 +101,8 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
   end
 
   test "a second PUT updates the existing alias", %{workspace_path: workspace_path} do
+    use_static_inventory(workspace_path)
+
     assert %{"data" => %{"display_name" => "First"}} =
              authorized_conn()
              |> put(@base_path, %{"path" => workspace_path, "display_name" => "First"})
@@ -108,6 +120,8 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
   end
 
   test "DELETE removes an alias", %{workspace_path: workspace_path} do
+    use_static_inventory(workspace_path)
+
     authorized_conn()
     |> put(@base_path, %{"path" => workspace_path, "display_name" => "Feature"})
     |> json_response(200)
@@ -137,6 +151,8 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
   end
 
   test "DELETE maps an unknown alias on an owned path to alias not found", %{workspace_path: workspace_path} do
+    use_static_inventory(workspace_path)
+
     conn = delete(authorized_conn(), @base_path, %{"path" => workspace_path})
 
     assert json_response(conn, 404) == %{
@@ -171,10 +187,11 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
   end
 
-  test "PUT rejects the exact project root when inventory does not contain it", %{project_root: project_root} do
+  test "PUT accepts the exact project root without a repository inventory entry", %{project_root: project_root} do
     conn = put(authorized_conn(), @base_path, %{"path" => project_root, "display_name" => "Project"})
 
-    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    assert %{"data" => %{"workspace_path" => ^project_root, "display_name" => "Project"}} =
+             json_response(conn, 200)
   end
 
   test "PUT accepts the exact project root when inventory contains it", %{project_root: project_root, tmp: tmp} do
@@ -267,6 +284,16 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
       :symphony_elixir,
       @inventory_module_env,
       SymphonyElixirWeb.Tracker.FailingWorkspaceDisplayNameInventory
+    )
+  end
+
+  defp use_static_inventory(workspace_path) do
+    Application.put_env(:symphony_elixir, :test_workspace_display_name_path, workspace_path)
+
+    Application.put_env(
+      :symphony_elixir,
+      @inventory_module_env,
+      SymphonyElixirWeb.Tracker.StaticWorkspaceDisplayNameInventory
     )
   end
 

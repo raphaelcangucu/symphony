@@ -142,7 +142,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
-         {:ok, workspace} <- persisted_thread_workspace(thread),
+         {:ok, workspace} <- persisted_thread_workspace(thread, opts),
          docs_before <- thread_doc_fingerprint(thread_id),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -610,8 +610,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     Keyword.take(opts, [:git])
   end
 
-  defp persisted_thread_workspace(%{scope: "freeform"} = thread) do
-    path = resolve_freeform_workspace_path(thread)
+  defp persisted_thread_workspace(thread, opts \\ [])
+
+  defp persisted_thread_workspace(%{scope: "freeform"} = thread, opts) do
+    path = resolve_freeform_workspace_path(thread, opts)
 
     case File.mkdir_p(path) do
       :ok ->
@@ -623,14 +625,14 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
-  defp persisted_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "" do
+  defp persisted_thread_workspace(%{workspace_path: path}, _opts) when is_binary(path) and path != "" do
     case File.mkdir_p(path) do
       :ok -> {:ok, path}
       {:error, _reason} -> {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
     end
   end
 
-  defp persisted_thread_workspace(_thread),
+  defp persisted_thread_workspace(_thread, _opts),
     do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
 
   # Freeform threads persist an absolute workspace path. When the instance
@@ -638,22 +640,22 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   # stored path falls outside Config.workspace_root/0 and Codex refuses the cwd.
   # Recompute the canonical freeform tree and repair the thread so the next turn
   # lands under the live root.
-  defp resolve_freeform_workspace_path(%{workspace_path: path} = thread)
+  defp resolve_freeform_workspace_path(%{workspace_path: path} = thread, opts)
        when is_binary(path) and path != "" do
-    root = Config.workspace_root() |> Path.expand()
+    root = opts |> Keyword.get(:workspace_root, Config.workspace_root()) |> Path.expand()
     expanded = Path.expand(path)
     root_prefix = root <> "/"
 
     if expanded != root and String.starts_with?(expanded <> "/", root_prefix) do
       expanded
     else
-      canonical_freeform_workspace(thread)
+      canonical_freeform_workspace(thread, opts)
     end
   end
 
-  defp resolve_freeform_workspace_path(thread), do: canonical_freeform_workspace(thread)
+  defp resolve_freeform_workspace_path(thread, opts), do: canonical_freeform_workspace(thread, opts)
 
-  defp canonical_freeform_workspace(%{metadata: metadata, id: thread_id}) do
+  defp canonical_freeform_workspace(%{metadata: metadata, id: thread_id}, opts) do
     binding_id =
       case metadata do
         %{"gateway_binding_id" => id} when is_integer(id) -> id
@@ -662,7 +664,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
         _other -> thread_id
       end
 
-    freeform_workspace(binding_id)
+    freeform_workspace(binding_id, workspace_root: Keyword.get(opts, :workspace_root, Config.workspace_root()))
   end
 
   defp repair_freeform_workspace_path(%{workspace_path: current} = thread, path)
@@ -721,7 +723,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp continue_goal_turn(%{scope: "project", project_slug: project_slug} = thread, context, opts, agent_kind) do
-    with {:ok, workspace} <- persisted_thread_workspace(thread),
+    with {:ok, workspace} <- persisted_thread_workspace(thread, opts),
          history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          prompt <- build_prompt(project_slug, @generic_goal_continuation_prompt, context, history),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
@@ -748,7 +750,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp continue_goal_turn(%{scope: "freeform"} = thread, context, opts, agent_kind) do
-    with {:ok, workspace} <- persisted_thread_workspace(thread),
+    with {:ok, workspace} <- persisted_thread_workspace(thread, opts),
          history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          prompt <- build_freeform_prompt(@generic_goal_continuation_prompt, context, history),
          {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),

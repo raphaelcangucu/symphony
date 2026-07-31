@@ -52,6 +52,31 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
     SymphonyElixir.Assistant.CatalogBundle.invalidate()
     SymphonyElixir.HotpathCache.invalidate_all()
 
+    # The endpoint assembles the catalog for every installed agent.  Keep this
+    # controller test focused on its HTTP contract instead of the Cursor CLI
+    # installed on the host running the test suite.
+    SymphonyElixir.HotpathCache.put(
+      :cursor_model_catalog,
+      %{
+        agent: "cursor",
+        agent_label: "Cursor Agent",
+        command: "cursor-agent",
+        default_model: "auto",
+        models: [
+          %{
+            id: "auto",
+            model: "auto",
+            label: "Auto",
+            is_default: true,
+            default_effort: "",
+            efforts: [],
+            input_modalities: ["text", "image"]
+          }
+        ]
+      },
+      60_000
+    )
+
     :ok
   end
 

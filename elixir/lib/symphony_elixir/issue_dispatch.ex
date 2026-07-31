@@ -297,7 +297,7 @@ defmodule SymphonyElixir.IssueDispatch do
 
           {:error, reason} ->
             Logger.debug("Skipping Claude goal routing on dispatch identifier=#{identifier} reason=#{inspect(reason)}")
-            {:error, reason}
+            :ok
         end
     end
   end

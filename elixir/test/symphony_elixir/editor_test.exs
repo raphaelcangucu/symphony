@@ -411,9 +411,16 @@ defmodule SymphonyElixir.EditorTest do
   end
 
   defp editor_front_matter do
+    workspace_root =
+      Path.join(System.tmp_dir!(), "symphony-editor-workspace-#{System.unique_integer([:positive])}")
+
+    on_exit(fn -> File.rm_rf(workspace_root) end)
+
     """
     github:
       repo: acme/app
+    workspace:
+      root: #{workspace_root}
     editor:
       enabled: true
       base_url: https://editor.example.com

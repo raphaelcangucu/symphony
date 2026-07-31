@@ -150,7 +150,7 @@ defmodule SymphonyElixir.Cursor.AcpClientTest do
         end
 
       _ ->
-        false
+        match?({_, 0}, System.cmd("kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true))
     end
   end
 end

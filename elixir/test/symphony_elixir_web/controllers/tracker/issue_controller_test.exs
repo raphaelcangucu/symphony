@@ -16,10 +16,34 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     clean_repo()
 
     previous_token = System.get_env(@token_env)
+    previous_catalog = Application.get_env(:symphony_elixir, :assistant_codex_catalog)
     System.put_env(@token_env, "secret")
+
+    Application.put_env(:symphony_elixir, :assistant_codex_catalog, %{
+      agent: "codex",
+      agent_label: "Codex CLI",
+      command: "codex app-server",
+      default_model: "gpt-5.5",
+      models: [
+        %{
+          id: "gpt-5.5",
+          model: "gpt-5.5",
+          label: "GPT-5.5",
+          is_default: true,
+          default_effort: "high",
+          efforts: [%{id: "high", label: "High"}]
+        }
+      ]
+    })
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
+
+      if is_nil(previous_catalog) do
+        Application.delete_env(:symphony_elixir, :assistant_codex_catalog)
+      else
+        Application.put_env(:symphony_elixir, :assistant_codex_catalog, previous_catalog)
+      end
     end)
 
     :ok
@@ -596,7 +620,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         "title" => "Clear model",
         "status" => "Todo",
         "agent" => "claude",
-        "model" => "claude-sonnet-4-5",
+        "model" => "claude-sonnet-4-6",
         "effort" => "high"
       })
 

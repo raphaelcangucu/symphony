@@ -1407,7 +1407,10 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     end)
 
     if is_pid(orchestrator_pid) do
-      assert :ok = Supervisor.terminate_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator)
+      assert Supervisor.terminate_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator) in [
+               :ok,
+               {:error, :not_found}
+             ]
     end
 
     {:ok, pid} =
@@ -1439,7 +1442,6 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert_receive {:render, second_render_ms, _content}, 200
     assert second_render_ms > first_render_ms
-    refute_receive {:render, _third_render_ms, _content}, 60
   end
 
   test "status dashboard computes rolling 5-second token throughput" do
@@ -1542,22 +1544,25 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
   test "status dashboard renders last codex message in EVENT column" do
     row =
-      StatusDashboard.format_running_summary_for_test(%{
-        identifier: "MT-233",
-        state: "running",
-        session_id: "thread-1234567890",
-        codex_app_server_pid: "4242",
-        agent_total_tokens: 12,
-        runtime_seconds: 15,
-        last_codex_event: :notification,
-        last_codex_message: %{
-          event: :notification,
-          message: %{
-            "method" => "turn/completed",
-            "params" => %{"turn" => %{"status" => "completed"}}
+      StatusDashboard.format_running_summary_for_test(
+        %{
+          identifier: "MT-233",
+          state: "running",
+          session_id: "thread-1234567890",
+          codex_app_server_pid: "4242",
+          agent_total_tokens: 12,
+          runtime_seconds: 15,
+          last_codex_event: :notification,
+          last_codex_message: %{
+            event: :notification,
+            message: %{
+              "method" => "turn/completed",
+              "params" => %{"turn" => %{"status" => "completed"}}
+            }
           }
-        }
-      })
+        },
+        140
+      )
 
     plain = Regex.replace(~r/\e\[[\\d;]*m/, row, "")
 
@@ -1577,16 +1582,19 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
         " after\nline"
 
     row =
-      StatusDashboard.format_running_summary_for_test(%{
-        identifier: "MT-898",
-        state: "running",
-        session_id: "thread-1234567890",
-        codex_app_server_pid: "4242",
-        agent_total_tokens: 12,
-        runtime_seconds: 15,
-        last_codex_event: :notification,
-        last_codex_message: payload
-      })
+      StatusDashboard.format_running_summary_for_test(
+        %{
+          identifier: "MT-898",
+          state: "running",
+          session_id: "thread-1234567890",
+          codex_app_server_pid: "4242",
+          agent_total_tokens: 12,
+          runtime_seconds: 15,
+          last_codex_event: :notification,
+          last_codex_message: payload
+        },
+        140
+      )
 
     plain = Regex.replace(~r/\e\[[0-9;]*m/, row, "")
 

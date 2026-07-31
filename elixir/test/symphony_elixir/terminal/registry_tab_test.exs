@@ -29,6 +29,10 @@ defmodule SymphonyElixir.Terminal.RegistryTabTest do
       end
     end)
 
+    for tab <- TabStore.list("demo", "DEMO-1") do
+      Registry.close_tab("demo", "DEMO-1", tab.id, tmux: FakeTmux)
+    end
+
     :ok
   end
 

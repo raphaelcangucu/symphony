@@ -7,9 +7,10 @@ defmodule SymphonyElixir.BackupTest do
     tmp = Path.join(System.tmp_dir!(), "symphony-backup-test-#{:erlang.unique_integer([:positive])}")
     db = Path.join(tmp, "tracker.sqlite3")
     backup_root = Path.join(tmp, "backups")
+    database_contents = String.duplicate("sqlite-test-db", 100)
 
     File.mkdir_p!(Path.dirname(db))
-    File.write!(db, "sqlite-test-db")
+    File.write!(db, database_contents)
 
     prev_db = Application.get_env(:symphony_elixir, SymphonyElixir.Repo)[:database]
     prev_backup = Application.get_env(:symphony_elixir, :backup_local_dir)
@@ -27,10 +28,10 @@ defmodule SymphonyElixir.BackupTest do
       File.rm_rf(tmp)
     end)
 
-    %{db: db, backup_root: backup_root}
+    %{db: db, backup_root: backup_root, database_contents: database_contents}
   end
 
-  test "create lists and restores database backup", %{db: db} do
+  test "create lists and restores database backup", %{db: db, database_contents: database_contents} do
     assert {:ok, backup} = Backup.create(trigger: "manual")
     assert backup.category == "database"
     assert File.exists?(backup.local_path)
@@ -41,7 +42,7 @@ defmodule SymphonyElixir.BackupTest do
     File.write!(db, "restored-content")
 
     assert {:ok, _} = Backup.restore(backup.id)
-    assert File.read!(db) == "sqlite-test-db"
+    assert File.read!(db) == database_contents
   end
 
   test "cleanup removes expired backups" do
