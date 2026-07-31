@@ -30,6 +30,8 @@ for line in sys.stdin:
         write({"id": request_id, "result": {"thread": {"id": "thread-1"}}})
     elif method == "thread/resume":
         write({"id": request_id, "result": {"thread": {"id": message.get("params", {}).get("threadId", "thread-1")}}})
+    elif method == "thread/name/set":
+        write({"id": request_id, "result": {}})
     elif method == "thread/goal/get":
         write({"id": request_id, "result": {"goal": None}})
     elif method == "thread/goal/set":

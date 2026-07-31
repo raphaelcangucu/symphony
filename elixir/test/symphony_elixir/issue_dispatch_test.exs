@@ -12,6 +12,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
     migrate_repo()
     clean_repo()
     previous_sync = Application.get_env(:symphony_elixir, :tracker, []) |> Keyword.get(:sync_enabled)
+    previous_claude_goal_support = Application.get_env(:symphony_elixir, :claude_goal_supported_override)
     Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
 
     on_exit(fn ->
@@ -24,6 +25,12 @@ defmodule SymphonyElixir.IssueDispatchTest do
         end
 
       Application.put_env(:symphony_elixir, :tracker, tracker_config)
+
+      if is_nil(previous_claude_goal_support) do
+        Application.delete_env(:symphony_elixir, :claude_goal_supported_override)
+      else
+        Application.put_env(:symphony_elixir, :claude_goal_supported_override, previous_claude_goal_support)
+      end
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Pref", slug: "pref"})
@@ -89,7 +96,13 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert {:ok, _result} = IssueDispatch.resume(project, issue.identifier, %{})
 
     assert {:ok, entries, _offset} = SessionEvents.tail(workspace)
-    assert Enum.map(entries, & &1["title"]) == ["Agent run failed", "Run resumed"]
+    titles = Enum.map(entries, & &1["title"])
+
+    # `resume/3` also wakes the orchestrator. A worker from the surrounding
+    # suite can append lifecycle events while this test observes the log, so
+    # assert the boundary this behavior owns rather than an exact global log.
+    assert Enum.find_index(titles, &(&1 == "Agent run failed")) <
+             Enum.find_index(titles, &(&1 == "Run resumed"))
   end
 
   test "resume injects draft context refs into dispatch guidance", %{issue: issue} do
@@ -125,6 +138,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
   test "non-Codex resume keeps caching agent_goal as workflow guidance", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")
+    Application.put_env(:symphony_elixir, :claude_goal_supported_override, false)
 
     assert {:ok, _result} =
              IssueDispatch.resume(project, issue.identifier, %{agent: "claude", goal: "Follow the workflow"})

@@ -867,15 +867,15 @@ defmodule SymphonyElixir.AgentExecution do
 
       String.starts_with?(message, "Agent run failed for ") ->
         case Regex.run(~r/Agent run failed for [^:]+: (.+)/, message) do
-          [_, reason] -> format_failure(parse_inspected_reason(reason))
+          [_, reason] -> format_inspected_failure(reason)
           _ -> truncate_failure(message)
         end
 
       String.starts_with?(message, "{:turn_failed") ->
-        format_failure(parse_inspected_reason(message))
+        format_inspected_failure(message)
 
       String.starts_with?(message, "{%RuntimeError") ->
-        format_failure(parse_inspected_reason(message))
+        format_inspected_failure(message)
 
       true ->
         truncate_failure(message)
@@ -897,6 +897,13 @@ defmodule SymphonyElixir.AgentExecution do
 
       true ->
         reason
+    end
+  end
+
+  defp format_inspected_failure(reason) when is_binary(reason) do
+    case parse_inspected_reason(reason) do
+      ^reason -> truncate_failure(reason)
+      parsed -> format_failure(parsed)
     end
   end
 
