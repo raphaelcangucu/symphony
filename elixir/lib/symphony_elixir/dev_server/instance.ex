@@ -402,10 +402,10 @@ defmodule SymphonyElixir.DevServer.Instance do
     prefix =
       contract
       |> RuntimeContract.to_env()
-      |> Enum.map(fn {key, value} -> "#{key}=#{shell_quote(value)}" end)
-      |> Enum.join(" ")
+      |> Enum.map(fn {key, value} -> "export #{key}=#{shell_quote(value)}" end)
+      |> Enum.join("; ")
 
-    "#{prefix} #{command}\n"
+    "#{prefix}; #{command}\n"
   end
 
   defp launch_command(step, port, _contract) do

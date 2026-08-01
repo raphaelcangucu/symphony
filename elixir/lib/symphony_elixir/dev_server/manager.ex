@@ -759,10 +759,10 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp prefixed_command(env, command) when is_map(env) and is_binary(command) do
     prefix =
       env
-      |> Enum.map(fn {key, value} -> "#{key}=#{shell_quote(to_string(value))}" end)
-      |> Enum.join(" ")
+      |> Enum.map(fn {key, value} -> "export #{key}=#{shell_quote(to_string(value))}" end)
+      |> Enum.join("; ")
 
-    "#{prefix} #{command}"
+    "#{prefix}; #{command}"
   end
 
   defp preferred_stop_command(
