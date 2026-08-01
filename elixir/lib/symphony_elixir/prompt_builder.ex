@@ -500,7 +500,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
     #{availability}
 
-    **Runtime contract:** when Preview is available, prefer `manage_preview` (`status` | `start` | `restart`) so chat and the Preview dock share one leased snapshot. If you must run the serve command yourself, call `manage_preview` with `action: prepare` first and run each returned `command` verbatim (it sets `port_env` plus `SYMPHONY_PREVIEW_*`). Never invent ports or use legacy fixed ports (for example `INSPIRE_PORT=4301`) outside a fresh prepare/start contract.
+    **Runtime contract:** when Preview is available, prefer `manage_preview` (`status` | `start` | `restart`) so chat and the Preview dock share one leased snapshot. If you must run the serve command yourself, call `manage_preview` with `action: prepare` first and run each returned `command` verbatim (it sets `port_env` plus `SYMPHONY_PREVIEW_*`). Never invent ports or use legacy fixed ports (for example `INSPIRE_PORT=4301`) outside a fresh prepare/start contract. If the repository's E2E wrapper can reuse an existing server, pass the exact latest `in_sync` URL as `PLAYWRIGHT_BASE_URL` and set `SYMPHONY_PREVIEW_REUSE=1`; do not start a second local listener inside the agent sandbox.
 
     **Cite only contracted URLs:** before citing a port or running HTTP checks, call `manage_preview` with `action: status` again (or trust the latest `start`/`restart`/`prepare` tool result). Cite only the ports/URLs it returns. When `sync_state` is present, cite only when it is `in_sync` — never probe or embed ports under `conflict`, `stale`, or `awaiting_report`.
 
