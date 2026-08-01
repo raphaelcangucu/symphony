@@ -1,6 +1,7 @@
 import Config
 
 config :phoenix, :json_library, Jason
+config :phoenix, :filter_parameters, ~w(password secret token access_token refresh_token authorization credentials)
 
 config :symphony_elixir, SymphonyElixirWeb.Gettext,
   locales: ~w(en pt_BR),
@@ -48,6 +49,13 @@ config :symphony_elixir, :tracker_seed_on_empty, Mix.env() != :test
 # Anthropic's OAuth usage API). Off in :test so suites never hit the network even
 # on a developer machine that happens to be logged into Claude.
 config :symphony_elixir, :claude_usage_probe_enabled, Mix.env() != :test
+
+# Managed agent CLI maintenance is opt-out per provider. The worker only checks
+# providers with an existing managed installation and never replaces the
+# executable held by an active session.
+config :symphony_elixir, :agent_maintenance_enabled, Mix.env() != :test
+config :symphony_elixir, :agent_maintenance_interval_ms, 21_600_000
+config :symphony_elixir, :agent_maintenance_initial_delay_ms, 30_000
 
 # Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
 # loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,

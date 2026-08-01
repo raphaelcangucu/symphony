@@ -39,6 +39,28 @@ defmodule SymphonyElixir.SettingsTest do
 
     assert Settings.all() == %{
              "agents" => %{"default_agent_kind" => "claude"},
+             "agent_cli" => %{
+               "claude" => %{
+                 "auto_update" => true,
+                 "failover_enabled" => false,
+                 "preferred_source" => "managed"
+               },
+               "codex" => %{
+                 "auto_update" => true,
+                 "failover_enabled" => false,
+                 "preferred_source" => "managed"
+               },
+               "cursor" => %{
+                 "auto_update" => true,
+                 "failover_enabled" => false,
+                 "preferred_source" => "managed"
+               },
+               "opencode" => %{
+                 "auto_update" => true,
+                 "failover_enabled" => false,
+                 "preferred_source" => "managed"
+               }
+             },
              "agent_models" => %{"codex" => nil, "claude" => nil, "cursor" => nil},
              "agent_efforts" => %{
                "codex" => nil,

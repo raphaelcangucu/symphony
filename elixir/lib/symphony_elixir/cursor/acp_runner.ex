@@ -62,7 +62,8 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
             [
               workspace: workspace,
               on_server_request: on_server_request,
-              model: Map.get(args, :model)
+              model: Map.get(args, :model),
+              agent_env: Map.get(args, :agent_env, %{})
             ] ++
               if Map.has_key?(args, :writer) do
                 [writer: Map.fetch!(args, :writer)]

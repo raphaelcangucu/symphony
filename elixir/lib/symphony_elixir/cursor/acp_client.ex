@@ -176,9 +176,16 @@ defmodule SymphonyElixir.Cursor.AcpClient do
         :use_stdio,
         args: Enum.map(port_args, &String.to_charlist/1),
         cd: String.to_charlist(workspace),
+        env: port_environment(Keyword.get(opts, :agent_env, %{})),
         line: @port_line_bytes
       ]
     )
+  end
+
+  defp port_environment(environment) do
+    Enum.map(environment, fn {name, value} ->
+      {String.to_charlist(to_string(name)), String.to_charlist(to_string(value))}
+    end)
   end
 
   defp handle_inbound("", state), do: state

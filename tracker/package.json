@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:agent-lifecycle": "../scripts/test-agent-lifecycle-e2e.sh",
     "lint": "eslint ."
   },
   "dependencies": {

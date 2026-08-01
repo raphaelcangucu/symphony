@@ -5,47 +5,32 @@ defmodule SymphonyElixir.Settings.AgentTools do
   product-grade agent settings panel.
 
   It joins three sources:
-  - `AgentAvailability` for install status, version, and resolved PATH.
+  - `AgentLifecycle.Resolver` for managed/PATH status and explicit fallback.
   - `AgentModels` for the curated model catalog and the operator's selection.
-  - A small static install-command hint per agent (informational only).
+  - `AgentLifecycle.Catalog` for provider lifecycle metadata.
   """
 
-  alias SymphonyElixir.AgentAvailability
+  alias SymphonyElixir.AgentLifecycle.{Catalog, Installer, Resolver}
   alias SymphonyElixir.Settings.AgentModels
-
-  # Keep atom keys explicit so we never call String.to_atom/1 on user input and
-  # the availability lookup stays a compile-time literal.
-  @agents [{:codex, "codex"}, {:claude, "claude"}, {:cursor, "cursor"}]
-
-  @install_commands %{
-    "codex" => "npm install -g @openai/codex",
-    "claude" => "npm install -g @anthropic-ai/claude-code",
-    "cursor" => "curl https://cursor.com/install -fsSL | bash"
-  }
 
   @spec list() :: [map()]
   def list do
-    availability = AgentAvailability.probe()
-
-    Enum.map(@agents, fn {atom, name} ->
-      present(name, Map.fetch!(availability, atom))
-    end)
+    Enum.map(Catalog.kinds(), &present/1)
   end
 
-  defp present(agent, status) do
+  defp present(agent) do
+    resolution = Resolver.resolve(agent)
+    catalog = Catalog.fetch!(agent)
+
     %{
       id: agent,
       kind: agent,
-      status: %{
-        installed: status.available,
-        version: status.version,
-        path: Map.get(status, :path),
-        command: status.command
-      },
-      source: source(status),
+      status: status(resolution, catalog),
+      source: source(resolution),
       install: %{
-        available: not status.available,
-        command: Map.get(@install_commands, agent)
+        available: managed_install_available?(resolution),
+        strategy: Atom.to_string(catalog.release.type),
+        pending_version: pending_version(agent)
       },
       model: %{
         options: AgentModels.options(agent),
@@ -54,8 +39,52 @@ defmodule SymphonyElixir.Settings.AgentTools do
     }
   end
 
-  defp source(%{available: true} = status),
-    do: %{value: "path", managed: false, detail: Map.get(status, :path)}
+  defp status({:ok, resolution}, catalog) do
+    %{
+      installed: true,
+      version: resolution.version,
+      path: resolution.executable_path,
+      command: catalog.executable
+    }
+  end
 
-  defp source(_status), do: %{value: "none", managed: false, detail: nil}
+  defp status({:error, reasons}, catalog) do
+    %{
+      installed: false,
+      version: nil,
+      path: nil,
+      command: catalog.executable,
+      detail: reasons
+    }
+  end
+
+  defp source({:ok, resolution}) do
+    %{
+      value: Atom.to_string(resolution.effective_source),
+      preferred: Atom.to_string(resolution.preferred_source),
+      managed: resolution.effective_source == :managed,
+      detail: resolution.executable_path,
+      fallback_reason: resolution.fallback_reason
+    }
+  end
+
+  defp source({:error, reasons}) do
+    %{
+      value: "none",
+      preferred: Atom.to_string(reasons.preferred_source),
+      managed: false,
+      detail: nil,
+      fallback_reason: reasons
+    }
+  end
+
+  defp managed_install_available?({:ok, %{effective_source: :managed}}), do: false
+  defp managed_install_available?(_resolution), do: true
+
+  defp pending_version(agent) do
+    case Installer.pending(agent) do
+      {:ok, %{"version" => version}} -> version
+      _ -> nil
+    end
+  end
 end

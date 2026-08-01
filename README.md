@@ -39,9 +39,11 @@ from the tracker UI.
 
 #### Quick start
 
-Prerequisites for the core path: **mise** (recommended), **gh** (authenticated), **Git**, and
-**Codex** (`codex app-server` on `PATH`). **`code-server`** and **`cloudflared`** are optional —
-only needed when you enable the browser editor or the public preview tunnel.
+Prerequisites for the core path: **mise** (recommended), **gh** (authenticated), and **Git**.
+Codex, Claude, Cursor, and OpenCode can be installed into Symphony's isolated data directory from
+**Settings → Coding agents**; an existing CLI on the system `PATH` remains a transparent fallback.
+**`code-server`** and **`cloudflared`** are optional — only needed when you enable the browser
+editor or the public preview tunnel.
 
 ```bash
 git clone <this-repo>
@@ -72,7 +74,7 @@ Ask a coding agent to walk through setup:
 #### What you get
 
 - **Tracker** at `/tracker` — boards, issue detail, assistant chats, observability
-- **Orchestrator** — isolated workspaces per issue, Codex or Claude per project/task
+- **Orchestrator** — isolated workspaces per issue; Codex, Claude, Cursor, or OpenCode per project/task
 - **Local-first sync** — SQLite mirror of remote trackers; background push/pull
 - **Optional**: browser VS Code (`make install-code-server`), Cursor Desktop, dev-server previews,
   Cloudflare public tunnel (`cloudflared`)

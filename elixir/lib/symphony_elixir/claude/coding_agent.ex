@@ -71,6 +71,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          cli_session_id: conversation_id(opts, "claude"),
          model: Keyword.get(opts, :model),
          effort: Keyword.get(opts, :effort),
+         agent_env: Keyword.get(opts, :agent_env, %{}),
          permission_mode: ExecutionMode.claude_permission_mode(Keyword.get(opts, :execution_mode), interactive?),
          permission_prompt_tool: Map.get(gateway, :permission_prompt_tool),
          gateway_token: Map.get(gateway, :token),
@@ -378,6 +379,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       permission_mode: turn_permission_mode(session, opts),
       permission_prompt_tool: session.permission_prompt_tool,
       settings_path: Map.get(session, :settings_path),
+      agent_env: Map.get(session, :agent_env, %{}),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end

@@ -114,6 +114,7 @@ defmodule SymphonyElixir.Observability.Registry do
       project_slug: get(report, "project_slug"),
       tracker_kind: get(report, "tracker_kind"),
       agent_kind: get(report, "agent_kind"),
+      agent_account_id: get(report, "agent_account_id"),
       source_url: get(report, "source_url"),
       status: :online,
       reported_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
@@ -129,6 +130,20 @@ defmodule SymphonyElixir.Observability.Registry do
   # Passively mirror the latest rate-limit payload (which carries agent
   # attribution here) into the longer-lived AgentUsage store. Best-effort: a
   # malformed payload must never break observability reporting.
+  defp capture_usage(%{
+         agent_kind: agent_kind,
+         agent_account_id: account_id,
+         rate_limits: rate_limits
+       })
+       when is_binary(agent_kind) and is_binary(account_id) and is_map(rate_limits) do
+    snapshot = AgentUsage.Window.normalize(agent_kind, rate_limits)
+    if usage_present?(snapshot), do: AgentUsage.put(agent_kind, account_id, snapshot), else: :ok
+  rescue
+    error -> Logger.warning("agent usage capture failed: #{inspect(error)}")
+  catch
+    kind, reason -> Logger.warning("agent usage capture crashed: #{inspect({kind, reason})}")
+  end
+
   defp capture_usage(%{agent_kind: agent_kind, rate_limits: rate_limits})
        when is_binary(agent_kind) and is_map(rate_limits) do
     snapshot = AgentUsage.Window.normalize(agent_kind, rate_limits)

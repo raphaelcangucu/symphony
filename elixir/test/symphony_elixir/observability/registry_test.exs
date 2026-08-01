@@ -85,6 +85,35 @@ defmodule SymphonyElixir.Observability.RegistryTest do
     assert Enum.find(usage.windows, &(&1.kind == :session)).used_percent == 55.0
   end
 
+  test "attributes passive rate limits to the reported launch account", %{name: name} do
+    snapshot = %{
+      "generated_at" => "2026-05-30T00:00:00Z",
+      "counts" => %{"running" => 0, "retrying" => 0},
+      "running" => [],
+      "retrying" => [],
+      "agent_totals" => %{},
+      "rate_limits" => %{
+        "limit_name" => "team",
+        "primary" => %{"usedPercent" => 42}
+      }
+    }
+
+    assert :ok =
+             Registry.put_report(
+               name,
+               report("r-account", %{
+                 "agent_kind" => "codex",
+                 "agent_account_id" => "work",
+                 "snapshot" => snapshot
+               })
+             )
+
+    assert %{snapshot: %{account_id: "work", plan: "team"}} =
+             AgentUsage.entry("codex", "work")
+
+    assert AgentUsage.get("codex") == nil
+  end
+
   test "does not capture usage when rate_limits is nil", %{name: name} do
     assert :ok = Registry.put_report(name, report("r2", %{"agent_kind" => "codex"}))
     assert AgentUsage.get("codex") == nil
