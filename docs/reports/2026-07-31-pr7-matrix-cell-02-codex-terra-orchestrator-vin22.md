@@ -34,6 +34,7 @@ Após a correção, o preview real ficou `ready` e `in_sync` em `http://127.0.0.
 - `git diff --check`: passou.
 - `npm run test:e2e -- --grep 'landing|health'`, com `SYMPHONY_PREVIEW_REUSE=1`, `SYMPHONY_PREVIEW_URL=http://127.0.0.1:10000` e `PLAYWRIGHT_BASE_URL=http://127.0.0.1:10000`: **3 passaram (2.1s)**.
 - Capturas reais geradas: `site-e2e-20260801/screens/vin-22-health-desktop-full.png` e `vin-22-health-mobile-full.png`; vídeos e traces de cada teste estão no mesmo diretório de evidência.
+- A evidência foi persistida no Host e ficou disponível no App como run durável `20260801044157-204995`, com cards de screenshot, vídeo, trace, logs, proveniência e hashes.
 - App Android: fluxo real de criação e execução gravado; a tela de execução mostrou `Live` e depois os cards de falha do E2E.
 
 ## Evidência e próxima ação
