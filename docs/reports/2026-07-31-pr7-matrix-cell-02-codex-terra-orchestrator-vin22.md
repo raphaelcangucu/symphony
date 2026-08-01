@@ -38,4 +38,4 @@ Após a correção, o preview real ficou `ready` e `in_sync` em `http://127.0.0.
 
 ## Evidência e próxima ação
 
-Os assets Android, as novas capturas desktop/mobile, vídeos, traces, manifesto, proveniência e hashes estão em `.symphony/evidence/artifacts/cell-02-codex-terra-orchestrator-android/` e serão publicados no [Gist específico da célula](https://gist.github.com/raphaelcangucu/266e892faf5e908cfd83969632f60a6f). A célula permanece pausada para revisão; não avanço para Claude/Cursor nesta etapa.
+Os assets Android, as novas capturas desktop/mobile, vídeos, traces, manifesto, proveniência e hashes estão em `.symphony/evidence/artifacts/cell-02-codex-terra-orchestrator-android/` e publicados no [Gist específico da célula](https://gist.github.com/raphaelcangucu/266e892faf5e908cfd83969632f60a6f). A célula permanece pausada para revisão; não avanço para Claude/Cursor nesta etapa.
